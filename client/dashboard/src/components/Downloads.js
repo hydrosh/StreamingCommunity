@@ -81,10 +81,7 @@ const Downloads = ({ theme }) => {
   }, {});
 
   return (
-    <Container fluid className="p-0" style={{ 
-      backgroundColor: theme === 'dark' ? '#121212' : '#ffffff', 
-      color: theme === 'dark' ? '#ffffff' : '#000000' 
-    }}>
+    <Container fluid className="p-0" id="downloads-container">
       <Container className="mt-4">
         <h2 className="mb-4">My Downloads</h2>
 
@@ -95,8 +92,8 @@ const Downloads = ({ theme }) => {
         ) : (
           <Row xs={1} md={3} className="g-4">
             {movies.map((movie) => (
-              <Col key={movie.id}>
-                <Card>
+              <Col key={movie.id} className={theme === 'dark' ? 'bg-dark text-white' : ''}>
+                <Card className={theme === 'dark' ? 'bg-secondary text-white' : ''}>
                   <Card.Body>
                     <div className="d-flex justify-content-between align-items-start">
                       <Card.Title>{movie.slug.replace(/-/g, ' ')}</Card.Title>
@@ -142,8 +139,8 @@ const Downloads = ({ theme }) => {
               <h4>{slug.replace(/-/g, ' ')}</h4>
               <Row xs={1} md={3} className="g-4">
                 {episodes.map((episode) => (
-                  <Col key={`${episode.n_s}-${episode.n_ep}`}>
-                    <Card>
+                  <Col key={`${episode.n_s}-${episode.n_ep}`} className={theme === 'dark' ? 'bg-dark text-white' : ''}>
+                    <Card className={theme === 'dark' ? 'bg-secondary text-white' : ''}>
                       <Card.Body>
                         <div className="d-flex justify-content-between align-items-start">
                           <Card.Title>

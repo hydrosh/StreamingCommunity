@@ -5,8 +5,8 @@ import 'bootstrap/dist/css/bootstrap.min.css';
 
 const Navbar = ({ toggleTheme, theme }) => {
   return (
-    <nav className={`navbar navbar-expand-lg ${theme === 'dark' ? 'navbar-dark bg-dark' : 'navbar-light bg-light'}`}>
-      <div className="container-fluid">
+    <nav className={`navbar navbar-expand-lg custom-navbar`}>
+      <div className="container-fluid" id="navbar">
         <Link className="navbar-brand" to="/">Home</Link>
         <button className="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
           <span className="navbar-toggler-icon"></span>
@@ -21,7 +21,7 @@ const Navbar = ({ toggleTheme, theme }) => {
             </li>
           </ul>
           <button
-            className="btn btn-outline-secondary ms-auto"
+            className="theme-toggle-btn ms-auto"
             onClick={toggleTheme}
           >
             {theme === 'dark' ? '☀️ Light Mode' : '🌙 Dark Mode'}

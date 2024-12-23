@@ -51,7 +51,7 @@ body {
 .container-fluid {
   background-color: var(--background-color);
   color: var(--text-color);
-  flex: 1;
+  flex: 1 1;
 }
 
 /* Global styles */
@@ -196,4 +196,65 @@ h1, h2, h3, h4, h5, h6, p, span, div {
 .search-bar-button:hover {
   background-color: var(--text-color);
   color: var(--background-color);
+}
+
+/* Navbar styles */
+.custom-navbar {
+  background-color: var(--background-secondary);
+  border-bottom: 1px solid var(--border-color);
+  transition: background-color 0.3s, color 0.3s;
+}
+
+.custom-navbar.navbar-dark {
+  background-color: var(--background-secondary);
+}
+
+.custom-navbar.navbar-light {
+  background-color: var(--background-secondary);
+}
+
+.custom-navbar .navbar-brand,
+.custom-navbar .nav-link {
+  color: var(--text-color);
+}
+
+.custom-navbar .nav-link:hover {
+  color: var(--text-secondary);
+}
+
+.custom-navbar .navbar-toggler {
+  border-color: var(--border-color);
+}
+
+.custom-navbar .navbar-toggler-icon {
+  background-image: none;
+  position: relative;
+}
+
+.custom-navbar .navbar-toggler-icon::before {
+  content: '☰';
+  position: absolute;
+  color: var(--text-color);
+  font-size: 1.5rem;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.theme-toggle-btn {
+  background-color: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-color);
+  padding: 0.375rem 0.75rem;
+  transition: all 0.3s ease;
+}
+
+.theme-toggle-btn:hover {
+  background-color: var(--hover-background);
+  color: var(--text-color);
+  border-color: var(--text-secondary);
+}
+
+#navbar {
+  background-color: transparent;
 }
