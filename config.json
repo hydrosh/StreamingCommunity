@@ -55,7 +55,7 @@
         }
     },
     "EXTRA": {
-        "mongodb": "mongodb+srv://...",
+        "mongodb": "mongodb://localhost:27017",
         "database": "StreamingCommunity"
     }
 }

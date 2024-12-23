@@ -17,10 +17,13 @@ const Watchlist = ({ theme }) => {
   const fetchWatchlistData = async () => {
     try {
       const watchlistResponse = await axios.get(`${SERVER_WATCHLIST_URL}/get`);
-      setWatchlistItems(watchlistResponse.data);
+      // Assicuriamoci che watchlistResponse.data sia un array
+      const items = Array.isArray(watchlistResponse.data) ? watchlistResponse.data : [];
+      setWatchlistItems(items);
       setLoading(false);
     } catch (error) {
       console.error("Error fetching watchlist:", error);
+      setWatchlistItems([]); // In caso di errore, impostiamo un array vuoto
       setLoading(false);
     }
   };
@@ -90,30 +93,34 @@ const Watchlist = ({ theme }) => {
   }, []);
 
   if (loading) {
-    return <div className="text-center mt-5">Loading...</div>;
+    return (
+      <Container fluid className="p-4">
+        <div className="text-center">
+          <div className="spinner-border" role="status">
+            <span className="visually-hidden">Loading...</span>
+          </div>
+        </div>
+      </Container>
+    );
   }
 
   return (
-    <Container fluid className="p-0" style={{ 
-      backgroundColor: theme === 'dark' ? '#121212' : '#ffffff', 
-      color: theme === 'dark' ? '#ffffff' : '#000000' 
-    }}>
-      <Container className="mt-4">
+    <Container fluid className="watchlist-container p-4">
+      <Container>
         <h2 className="mb-4">My Watchlist</h2>
         
         <Button onClick={checkNewSeasons} variant="primary" className="mb-4">
           Check for New Seasons
         </Button>
 
-        {/* Mostra il messaggio sulle nuove stagioni */}
         {newSeasonsMessage && (
           <Alert variant={newSeasonsMessage.includes("Nuove stagioni") ? "success" : "info"}>
             {newSeasonsMessage}
           </Alert>
         )}
 
-        {watchlistItems.length === 0 ? (
-          <p>Your watchlist is empty.</p>
+        {(!watchlistItems || watchlistItems.length === 0) ? (
+          <Alert variant="info">Your watchlist is empty.</Alert>
         ) : (
           <Row xs={1} md={3} className="g-4">
             {watchlistItems.map((item) => {
@@ -123,7 +130,7 @@ const Watchlist = ({ theme }) => {
 
               return (
                 <Col key={item.name}>
-                  <Card>
+                  <Card className="h-100">
                     <Card.Body>
                       <div className="d-flex justify-content-between align-items-start">
                         <Card.Title>
@@ -141,16 +148,15 @@ const Watchlist = ({ theme }) => {
                         </Button>
                       </div>
                       <Card.Text>
-                        <small>
+                        <small className="text-secondary">
                           Added on: {new Date(item.added_on).toLocaleDateString()}
                         </small>
                         <br />
-                        <small>Seasons: {item.season}</small>
+                        <small className="text-secondary">Seasons: {item.season}</small>
                       </Card.Text>
                       <Link
                         to={`/title/${item.name}`}
-                        state={{ url: item.title_url }}
-                        className="btn btn-primary btn-sm mt-2"
+                        className="btn btn-primary btn-sm"
                       >
                         View Details
                       </Link>
@@ -167,7 +173,6 @@ const Watchlist = ({ theme }) => {
 };
 
 Watchlist.propTypes = {
-  toggleTheme: PropTypes.func.isRequired,
   theme: PropTypes.oneOf(['light', 'dark']).isRequired,
 };
 

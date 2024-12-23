@@ -27,16 +27,12 @@ const Dashboard = ({ theme }) => {
   };
 
   return (
-    <Container fluid className="p-4" style={{ 
-      backgroundColor: theme === 'dark' ? '#121212' : '#ffffff', 
-      color: theme === 'dark' ? '#ffffff' : '#000000' 
-    }}>
+    <Container fluid className={`p-4 ${theme === 'dark' ? 'dark-mode' : 'light-mode'}`}>
       <h1 className="mb-4">Dashboard</h1>
       
       <div className="d-flex justify-content-between align-items-center mb-4">
-        <SearchBar onSearch={handleSearch} />
+        <SearchBar onSearch={handleSearch} theme={theme} />
       </div>
-
     </Container>
   );
 };

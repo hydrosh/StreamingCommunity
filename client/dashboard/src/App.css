@@ -1,4 +1,102 @@
+/* Theme variables */
+:root[data-theme="light"] {
+  --background-color: #ffffff;
+  --background-secondary: #f4f4f4;
+  --text-color: #333333;
+  --text-secondary: #666666;
+  --border-color: #e0e0e0;
+  --card-background: #ffffff;
+  --hover-background: #f0f0f0;
+  --shadow-color: rgba(0, 0, 0, 0.1);
+}
+
+:root[data-theme="dark"] {
+  --background-color: #121212;
+  --background-secondary: #1e1e1e;
+  --text-color: #ffffff;
+  --text-secondary: #bbbbbb;
+  --border-color: #333333;
+  --card-background: #1e1e1e;
+  --hover-background: #2a2a2a;
+  --shadow-color: rgba(0, 0, 0, 0.5);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background-color: var(--background-color) !important;
+}
+
+body {
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--background-color);
+  color: var(--text-color);
+  transition: background-color 0.3s, color 0.3s;
+}
+
+#root {
+  min-height: 100vh;
+  background-color: var(--background-color) !important;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Apply theme to all containers */
+.container, 
+.container-fluid {
+  background-color: var(--background-color);
+  color: var(--text-color);
+  flex: 1;
+}
+
+/* Global styles */
+html, 
+body, 
+#root {
+  height: 100%;
+}
+
+body {
+  background-color: var(--background-color) !important;
+  color: var(--text-color) !important;
+  transition: background-color 0.3s, color 0.3s;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+#root {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--background-color) !important;
+}
+
+/* Style all cards */
+.card {
+  background-color: var(--card-background);
+  border-color: var(--border-color);
+  color: var(--text-color);
+}
+
+/* Style all text */
+h1, h2, h3, h4, h5, h6, p, span, div {
+  color: var(--text-color);
+}
+
+/* Style secondary text */
+.text-secondary {
+  color: var(--text-secondary) !important;
+}
+
 .search-results-container {
+  background-color: var(--background-color);
+  color: var(--text-color);
   padding: 20px;
 }
 
@@ -8,25 +106,17 @@
   gap: 20px;
 }
 
-.search-results-container {
-  background-color: var(--background-color);
-  color: var(--text-color);
-}
-
 .search-result-item {
-  background-color: #f0f0f0; /* Default (light mode) */
+  background-color: var(--card-background);
   color: var(--text-color);
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
-}
-
-@media (prefers-color-scheme: dark) {
-  .search-result-item {
-    background-color: #1e1e1e;
-  }
+  box-shadow: 0 4px 6px var(--shadow-color);
+  transition: transform 0.2s, box-shadow 0.2s;
+  border: 1px solid var(--border-color);
 }
 
 .search-result-item:hover {
   transform: scale(1.05);
+  box-shadow: 0 6px 8px var(--shadow-color);
 }
 
 .result-image {
@@ -37,10 +127,73 @@
 
 .result-info {
   padding: 10px;
-  background-color: #f4f4f4;
+  background-color: var(--background-secondary);
 }
 
 .result-info h2 {
   margin: 0 0 10px 0;
   font-size: 1.2rem;
+  color: var(--text-color);
+}
+
+/* Watchlist styles */
+.watchlist-container {
+  background-color: var(--background-color);
+  color: var(--text-color);
+  min-height: 100vh;
+}
+
+.watchlist-container .card {
+  background-color: var(--card-background);
+  border-color: var(--border-color);
+  transition: transform 0.2s;
+}
+
+.watchlist-container .card:hover {
+  transform: translateY(-5px);
+}
+
+.watchlist-container .btn-outline-danger {
+  color: var(--text-color);
+  border-color: var(--border-color);
+}
+
+.watchlist-container .btn-outline-danger:hover {
+  background-color: #dc3545;
+  color: white;
+}
+
+.watchlist-container .alert {
+  background-color: var(--card-background);
+  border-color: var(--border-color);
+  color: var(--text-color);
+}
+
+/* Search bar styles */
+.search-bar-input {
+  background-color: var(--background-secondary);
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+  transition: background-color 0.3s, color 0.3s;
+}
+
+.search-bar-input::placeholder {
+  color: var(--text-secondary);
+}
+
+.search-bar-input:focus {
+  background-color: var(--background-secondary);
+  color: var(--text-color);
+  border-color: var(--hover-background);
+}
+
+.search-bar-button {
+  background-color: var(--hover-background);
+  border-color: var(--border-color);
+  color: var(--text-color);
+}
+
+.search-bar-button:hover {
+  background-color: var(--text-color);
+  color: var(--background-color);
 }

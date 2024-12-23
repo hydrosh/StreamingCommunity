@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Form, InputGroup, Button } from 'react-bootstrap';
 import { FaSearch } from 'react-icons/fa';
 
-const SearchBar = ({ onSearch }) => {
+const SearchBar = ({ onSearch, theme }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const navigate = useNavigate();
 
@@ -22,15 +22,16 @@ const SearchBar = ({ onSearch }) => {
   };
 
   return (
-    <Form onSubmit={handleSearch} className="w-100" >
+    <Form onSubmit={handleSearch} className="w-100">
       <InputGroup>
         <Form.Control
           type="text"
           placeholder="Search movies or TV shows..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
+          className="search-bar-input"
         />
-        <Button type="submit" variant="primary">
+        <Button type="submit" variant="primary" className="search-bar-button">
           <FaSearch />
         </Button>
       </InputGroup>
@@ -39,7 +40,8 @@ const SearchBar = ({ onSearch }) => {
 };
 
 SearchBar.propTypes = {
-  onSearch: PropTypes.func
+  onSearch: PropTypes.func,
+  theme: PropTypes.string
 };
 
 export default SearchBar;

@@ -45,13 +45,15 @@ const SearchResults = ({ theme }) => {
   };
 
   return (
-    <Container fluid className="p-4" style={{ 
-      backgroundColor: theme === 'dark' ? '#121212' : '#ffffff', 
-      color: theme === 'dark' ? '#ffffff' : '#000000' 
+    <Container fluid className={`search-results-container p-4`} style={{
+      backgroundColor: theme === 'dark' ? 'var(--background-color)' : 'var(--background-secondary)',
+      color: theme === 'dark' ? 'var(--text-color)' : 'var(--text-secondary)',
     }}>
-      <div className="mb-4">
-        <SearchBar />
-      </div>
+      <Row className="mb-4">
+        <Col>
+          <SearchBar />
+        </Col>
+      </Row>
 
       <h2 className="mb-4">Search Results</h2>
 
@@ -63,25 +65,25 @@ const SearchResults = ({ theme }) => {
         </div>
       ) : (
         <Row xs={2} md={4} lg={6} className="g-4">
-          {results.map((item) => (
+          {results.map((item, idx) => (
             <Col key={item.id}>
-              <Card 
-                className="h-100 hover-zoom" 
+              <Card
+                className="search-result-item h-100"
+                style={{
+                  backgroundColor: theme === 'dark' ? 'var(--card-background)' : 'white',
+                  borderColor: theme === 'dark' ? 'var(--border-color)' : '#e0e0e0'
+                }}
                 onClick={() => handleItemClick(item)}
-                style={{ cursor: 'pointer' }}
               >
-                <Card.Img 
-                  variant="top" 
-                  src={item.images.poster || item.images.cover} 
+                <Card.Img
+                  variant="top"
+                  src={item.images.poster || item.images.cover}
                   alt={item.name}
-                  style={{ 
-                    height: '300px', 
-                    objectFit: 'cover' 
-                  }}
+                  className="result-image"
                 />
-                <Card.Body>
+                <Card.Body className="result-info">
                   <Card.Title>{item.name}</Card.Title>
-                  <Card.Text>
+                  <Card.Text className="text-secondary">
                     {item.year} • {item.type === 'tv' ? 'TV Series' : 'Movie'}
                     {item.type === 'tv' && ` • ${item.seasons_count} Seasons`}
                   </Card.Text>
@@ -96,9 +98,7 @@ const SearchResults = ({ theme }) => {
 };
 
 SearchResults.propTypes = {
-  toggleTheme: PropTypes.func.isRequired,
   theme: PropTypes.oneOf(['light', 'dark']).isRequired,
 };
-
 
 export default SearchResults;
