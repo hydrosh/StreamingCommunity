@@ -93,7 +93,7 @@ const Downloads = ({ theme }) => {
       downloadStatus.current_download.type === item.type;
 
     if (isCurrentDownload) {
-      return <Badge bg="primary"><FaDownload /> Downloading</Badge>;
+      return { color: 'primary', text: 'Downloading' };
     }
 
     const isQueued = downloadStatus.queue.some(queueItem => 
@@ -101,15 +101,15 @@ const Downloads = ({ theme }) => {
     );
 
     if (isQueued) {
-      return <Badge bg="warning"><FaClock /> In Queue</Badge>;
+      return { color: 'warning', text: 'In Queue' };
     }
 
     if (item.status === "completed") {
-      return <Badge bg="success">Completed</Badge>;
+      return { color: 'success', text: 'Completed' };
     }
 
     if (item.status === "failed") {
-      return <Badge bg="danger">Failed</Badge>;
+      return { color: 'danger', text: 'Failed' };
     }
 
     return null;
@@ -200,31 +200,68 @@ const Downloads = ({ theme }) => {
           <Row xs={1} md={3} className="g-4">
             {movies.map((movie) => (
               <Col key={movie.id}>
-                <Card className={theme === 'dark' ? 'bg-secondary text-white' : ''}>
+                <Card 
+                  className={`mb-3 ${theme === 'dark' ? 'bg-dark text-white border-secondary' : ''}`}
+                >
                   <Card.Body>
-                    <div className="d-flex justify-content-between align-items-start">
-                      <div>
-                        <Card.Title>{movie.slug.replace(/-/g, ' ')}</Card.Title>
-                        {getStatusBadge(movie)}
-                      </div>
-                      <div className="d-flex">
-                        {movie.path && (
+                    <Row>
+                      <Col md={8}>
+                        <Card.Title className="mb-3">
+                          {movie.slug.replace(/-/g, ' ')}
+                        </Card.Title>
+                        <div className="d-flex align-items-center mb-2">
+                          <Badge 
+                            bg={getStatusBadge(movie).color}
+                            className="me-2"
+                          >
+                            {getStatusBadge(movie).text}
+                          </Badge>
+                          {movie.progress && (
+                            <small className="text-muted">
+                              {movie.progress}%
+                            </small>
+                          )}
+                        </div>
+                        <small className="text-muted d-block">
+                          Path: {movie.path}
+                        </small>
+                      </Col>
+                      <Col md={4} className="d-flex justify-content-end align-items-center">
+                        {movie.status === 'completed' && (
                           <Button
-                            variant="primary"
+                            variant="success"
                             className="me-2"
                             onClick={() => handleWatchVideo(movie.path)}
                           >
                             <FaPlay />
                           </Button>
                         )}
+                        {movie.status === 'pending' && (
+                          <Button
+                            variant="primary"
+                            className="me-2"
+                            onClick={() => handleDeleteMovie(movie.id)}
+                          >
+                            <FaDownload />
+                          </Button>
+                        )}
+                        {movie.status === 'downloading' && (
+                          <Button
+                            variant="warning"
+                            className="me-2"
+                            disabled
+                          >
+                            <FaClock />
+                          </Button>
+                        )}
                         <Button
-                          variant="danger"
+                          variant={theme === 'dark' ? 'danger' : 'outline-danger'}
                           onClick={() => handleDeleteMovie(movie.id)}
                         >
                           <FaTrash />
                         </Button>
-                      </div>
-                    </div>
+                      </Col>
+                    </Row>
                   </Card.Body>
                 </Card>
               </Col>
@@ -246,33 +283,68 @@ const Downloads = ({ theme }) => {
                 <Row xs={1} md={2} lg={3} className="g-3">
                   {episodes.map((episode) => (
                     <Col key={`${episode.id}-${episode.n_s}-${episode.n_ep}`}>
-                      <Card className={theme === 'dark' ? 'bg-dark text-white' : ''}>
+                      <Card 
+                        className={`mb-3 ${theme === 'dark' ? 'bg-dark text-white border-secondary' : ''}`}
+                      >
                         <Card.Body>
-                          <div className="d-flex justify-content-between align-items-start">
-                            <div>
-                              <Card.Title>
+                          <Row>
+                            <Col md={8}>
+                              <Card.Title className="mb-3">
                                 S{episode.n_s}E{episode.n_ep}
                               </Card.Title>
-                              {getStatusBadge(episode)}
-                            </div>
-                            <div className="d-flex">
-                              {episode.path && (
+                              <div className="d-flex align-items-center mb-2">
+                                <Badge 
+                                  bg={getStatusBadge(episode).color}
+                                  className="me-2"
+                                >
+                                  {getStatusBadge(episode).text}
+                                </Badge>
+                                {episode.progress && (
+                                  <small className="text-muted">
+                                    {episode.progress}%
+                                  </small>
+                                )}
+                              </div>
+                              <small className="text-muted d-block">
+                                Path: {episode.path}
+                              </small>
+                            </Col>
+                            <Col md={4} className="d-flex justify-content-end align-items-center">
+                              {episode.status === 'completed' && (
                                 <Button
-                                  variant="primary"
+                                  variant="success"
                                   className="me-2"
                                   onClick={() => handleWatchVideo(episode.path)}
                                 >
                                   <FaPlay />
                                 </Button>
                               )}
+                              {episode.status === 'pending' && (
+                                <Button
+                                  variant="primary"
+                                  className="me-2"
+                                  onClick={() => handleDeleteEpisode(episode.id, episode.n_s, episode.n_ep)}
+                                >
+                                  <FaDownload />
+                                </Button>
+                              )}
+                              {episode.status === 'downloading' && (
+                                <Button
+                                  variant="warning"
+                                  className="me-2"
+                                  disabled
+                                >
+                                  <FaClock />
+                                </Button>
+                              )}
                               <Button
-                                variant="danger"
+                                variant={theme === 'dark' ? 'danger' : 'outline-danger'}
                                 onClick={() => handleDeleteEpisode(episode.id, episode.n_s, episode.n_ep)}
                               >
                                 <FaTrash />
                               </Button>
-                            </div>
-                          </div>
+                            </Col>
+                          </Row>
                         </Card.Body>
                       </Card>
                     </Col>

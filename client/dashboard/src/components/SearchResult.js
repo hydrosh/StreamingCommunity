@@ -37,9 +37,10 @@ const SearchResults = ({ theme }) => {
   }, [location.search]);
 
   const handleItemClick = (item) => {
-    navigate(`/title/${item.id}-${item.slug}`, { 
+    navigate(`/title/${item.id}-${item.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`, { 
       state: { 
-        url: item.url  // Pass the full URL to the TitleDetail component
+        id: item.id,
+        type: item.type
       } 
     });
   };

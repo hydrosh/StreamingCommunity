@@ -155,13 +155,37 @@ async def get_list_search(q: Optional[str] = Query(None)):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/api/getInfo")
-async def get_info_title(url: Optional[str] = Query(None)):
-    if not url or "http" not in url:
-        logging.warning("GetInfo request without URL parameter")
-        raise HTTPException(status_code=400, detail="Missing URL parameter")
-    
+async def get_info_title(
+    url: Optional[str] = Query(None),
+    id: Optional[str] = Query(None),
+    type: Optional[str] = Query(None)
+):
     try:
-        result = get_infoSelectTitle(url, domain, version)
+        # Se abbiamo l'URL, assicuriamoci che sia completo
+        if url:
+            if not url.startswith('http'):
+                url = f"https://streamingcommunity.{domain}/titles/{url}"
+            result = get_infoSelectTitle(url, domain, version)
+        # Altrimenti, se abbiamo ID e type, costruiamo l'URL
+        elif id and type:
+            # Prima cerca il titolo per ottenere lo slug
+            search_results = search_titles(f"id:{id}", domain)
+            title = next((t for t in search_results if str(t['id']) == str(id)), None)
+            
+            if not title:
+                logging.warning(f"Title with ID {id} not found in search results")
+                raise HTTPException(status_code=404, detail="Title not found")
+            
+            # Costruisci l'URL con lo slug
+            url = f"https://streamingcommunity.{domain}/titles/{id}-{title['slug']}"
+            logging.info(f"Constructed URL: {url}")
+            result = get_infoSelectTitle(url, domain, version)
+        else:
+            logging.warning("GetInfo request with invalid parameters")
+            raise HTTPException(status_code=400, detail="Missing required parameters")
+
+        if not result:
+            raise HTTPException(status_code=404, detail="Title not found")
 
         if result.get('type') == "tv":
             global season_name, scrape_serie, video_source
@@ -182,6 +206,7 @@ async def get_info_title(url: Optional[str] = Query(None)):
     
     except Exception as e:
         logging.error(f"Error retrieving title info: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/getInfoSeason")
 async def get_info_season(url: Optional[str] = Query(None), n: Optional[str] = Query(None)):
@@ -378,7 +403,7 @@ async def get_download_status():
             "max_concurrent": MAX_CONCURRENT_DOWNLOADS
         }
     except Exception as e:
-        logging.error(f"Error getting download status: {str(e)}", exc_info=True)
+        logging.error(f"Error getting download status: {e}")
         raise HTTPException(status_code=500, detail="Failed to get download status")
 
 @app.put("/api/downloads/config")

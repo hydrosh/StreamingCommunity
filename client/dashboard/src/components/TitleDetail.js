@@ -1,106 +1,175 @@
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import PropTypes from 'prop-types';
 import axios from 'axios';
-import { Container, Row, Col, Image, Button, Modal } from 'react-bootstrap';
+import { Container, Row, Col, Image, Button, Dropdown, Modal, Alert } from 'react-bootstrap';
 import { FaDownload, FaPlay, FaPlus, FaTrash } from 'react-icons/fa';
-import { toast } from 'react-toastify';
 
 import SearchBar from './SearchBar.js';
 
-import { API_URL, SERVER_PATH_URL, SERVER_WATCHLIST_URL } from './ApiUrl';
+import { API_URL, SERVER_WATCHLIST_URL, SERVER_PATH_URL } from './ApiUrl.js';
 
 const TitleDetail = ({ theme }) => {
-  const { url } = useParams();
   const [titleDetails, setTitleDetails] = useState(null);
-  const [episodes, setEpisodes] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [selectedSeason, setSelectedSeason] = useState(1);
-  const [downloadStatus, setDownloadStatus] = useState({ tv: {}, movies: {} });
+  const [episodes, setEpisodes] = useState([]);
+  const [hoveredEpisode, setHoveredEpisode] = useState(null);
   const [isInWatchlist, setIsInWatchlist] = useState(false);
+  const [downloadStatus, setDownloadStatus] = useState({});
+  const [showPlayer, setShowPlayer] = useState(false);
+  const [currentVideo, setCurrentVideo] = useState("");
+  const location = useLocation();
 
-  // Fetch title details
   useEffect(() => {
     const fetchTitleDetails = async () => {
       try {
+        setLoading(true);
+        const titleUrl = location.state?.url || location.pathname.split('/title/')[1];
+
+        // Fetch title information
         const response = await axios.get(`${API_URL}/getInfo`, {
-          params: { url }
+          params: { url: titleUrl }
         });
+        
         const titleData = response.data;
         setTitleDetails(titleData);
 
-        // If it's a TV show, fetch first season episodes
-        if (titleData.type === 'tv') {
-          fetchSeasonEpisodes(1);
-        }
+        // Check download status
+        await checkDownloadStatus(titleData);
 
         // Check watchlist status
-        const watchlistStatus = await axios.get(`${SERVER_WATCHLIST_URL}/check`, {
-          params: { title_url: url }
-        });
-        setIsInWatchlist(watchlistStatus.data.in_watchlist);
+        await checkWatchlistStatus(titleData.slug);
+
+        // For TV shows, fetch first season episodes directly
+        if (titleData.type === 'tv') {
+          setEpisodes(titleData.episodes || []);
+        }
+
+        setLoading(false);
       } catch (error) {
         console.error("Error fetching title details:", error);
+        setLoading(false);
       }
     };
 
     fetchTitleDetails();
-  }, [url]);
+  }, [location]);
 
-  const fetchSeasonEpisodes = async (seasonNumber) => {
+  // Check if the movie/series is already downloaded
+  const checkDownloadStatus = async (titleData) => {
     try {
-      const response = await axios.get(`${API_URL}/getInfoSeason`, {
-        params: { 
-          url,
-          n: seasonNumber 
-        }
-      });
-      setEpisodes(response.data);
+      if (titleData.type === 'movie') {
+        const response = await axios.get(`${SERVER_PATH_URL}/get`);
+        const downloadedMovie = response.data.find(
+          download => download.type === 'movie' && download.slug === titleData.slug
+        );
+        setDownloadStatus({ 
+          movie: { 
+            downloaded: !!downloadedMovie, 
+            path: downloadedMovie ? downloadedMovie.path : null 
+          } 
+        });
+      } else if (titleData.type === 'tv') {
+        const response = await axios.get(`${SERVER_PATH_URL}/get`);
+        const downloadedEpisodes = response.data.filter(
+          download => download.type === 'tv' && download.slug === titleData.slug
+        );
+        
+        const episodeStatus = {};
+        downloadedEpisodes.forEach(episode => {
+          episodeStatus[`S${episode.n_s}E${episode.n_ep}`] = {
+            downloaded: true,
+            path: episode.path
+          };
+        });
+        setDownloadStatus({ tv: episodeStatus });
+      }
     } catch (error) {
-      console.error("Error fetching season episodes:", error);
+      console.error("Error checking download status:", error);
     }
   };
 
-  const handleDownloadSeason = async (seasonNumber) => {
+  // Check watchlist status
+  const checkWatchlistStatus = async (slug) => {
     try {
-      await axios.get(`${API_URL}/download/season`, {
+      const response = await axios.get(`${SERVER_WATCHLIST_URL}/get`);
+      const inWatchlist = response.data.some(item => item.name === slug);
+      setIsInWatchlist(inWatchlist);
+    } catch (error) {
+      console.error("Error checking watchlist status:", error);
+    }
+  };
+
+  const handleSeasonSelect = async (seasonNumber) => {
+    if (titleDetails.type === 'tv') {
+      try {
+        setLoading(true);
+        const seasonResponse = await axios.get(`${API_URL}/getInfoSeason`, {
+          params: { 
+            url: location.state?.url,
+            n: seasonNumber 
+          }
+        });
+        
+        setSelectedSeason(seasonNumber);
+        setEpisodes(seasonResponse.data);
+        setLoading(false);
+      } catch (error) {
+        console.error("Error fetching season details:", error);
+        setLoading(false);
+      }
+    }
+  };
+
+  const handleDownloadFilm = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/download/film`, {
         params: {
-          season: seasonNumber,
-          titleID: titleDetails.id,
+          id: titleDetails.id,
           slug: titleDetails.slug
         }
       });
-      toast.success(`Season ${seasonNumber} queued for download`);
+      const videoPath = response.data.path;
+      
+      // Update download status
+      setDownloadStatus({
+        movie: { 
+          downloaded: true, 
+          path: videoPath 
+        }
+      });
     } catch (error) {
-      console.error("Error downloading season:", error);
-      toast.error("Failed to queue season for download");
+      console.error("Error downloading film:", error);
+      alert("Error downloading film. Please try again.");
     }
   };
 
-  const handleDownloadEpisode = async (seasonNum, episodeNum) => {
+  const handleDownloadEpisode = async (seasonNumber, episodeNumber, titleID, titleSlug) => {
     try {
       const response = await axios.get(`${API_URL}/download/episode`, {
         params: {
-          n_s: seasonNum,
-          n_ep: episodeNum,
-          titleID: titleDetails.id,
-          slug: titleDetails.slug
+          n_s: seasonNumber,
+          n_ep: episodeNumber,
+          titleID: titleID,
+          slug: titleSlug 
         }
       });
+      const videoPath = response.data.path;
       
-      if (response.data.status === "queued") {
-        // Update local state
-        setDownloadStatus(prev => ({
-          tv: {
-            ...prev.tv,
-            [`S${seasonNum}E${episodeNum}`]: {
-              ...prev.tv[`S${seasonNum}E${episodeNum}`],
-              queued: true
-            }
+      // Update download status for this specific episode
+      setDownloadStatus(prev => ({
+        tv: {
+          ...prev.tv,
+          [`S${seasonNumber}E${episodeNumber}`]: {
+            downloaded: true,
+            path: videoPath
           }
-        }));
-      }
+        }
+      }));
     } catch (error) {
       console.error("Error downloading episode:", error);
+      alert("Error downloading episode. Please try again.");
     }
   };
 
@@ -108,51 +177,42 @@ const TitleDetail = ({ theme }) => {
     if (!videoPath) {
       // If no path provided, attempt to get path from downloads
       try {
-        const response = await axios.get(`${SERVER_PATH_URL}/get`);
-        const downloads = response.data;
-        
-        const download = downloads.find(d => {
-          if (titleDetails.type === 'movie') {
-            return d.type === 'movie' && d.id === titleDetails.id;
-          } else {
-            return d.type === 'tv' && 
-                   d.id === titleDetails.id && 
-                   d.season === selectedSeason;
-          }
-        });
-
-        if (download?.path) {
-          const encodedPath = encodeURIComponent(download.path.replace(/^.*[\\\/]/, ''));
-          const videoUrl = `${API_URL}/downloaded/${encodedPath}`;
-          window.open(videoUrl, '_blank');
+        let path;
+        if (titleDetails.type === 'movie') {
+          const response = await axios.get(`${SERVER_PATH_URL}/movie`, {
+            params: { id: titleDetails.id }
+          });
+          path = response.data.path;
         } else {
-          toast.error('Video path not found');
+          alert("Please select a specific episode to watch.");
+          return;
         }
+        
+        setCurrentVideo(path);
       } catch (error) {
-        console.error('Error getting video path:', error);
-        toast.error('Failed to get video path');
+        alert("Please download the content first.");
+        return;
       }
     } else {
-      const encodedPath = encodeURIComponent(videoPath.replace(/^.*[\\\/]/, ''));
-      const videoUrl = `${API_URL}/downloaded/${encodedPath}`;
-      window.open(videoUrl, '_blank');
+      setCurrentVideo(videoPath);
     }
+    setShowPlayer(true);
   };
 
   const handleAddToWatchlist = async () => {
     try {
       await axios.post(`${SERVER_WATCHLIST_URL}/add`, {
         name: titleDetails.slug,
-        url,
-        season: titleDetails.season_count
+        url: location.state?.url || location.pathname.split('/title/')[1],
+        season: titleDetails.season_count  // Changed 'season_count' to 'season'
       });
       setIsInWatchlist(true);
     } catch (error) {
       console.error("Error adding to watchlist:", error);
       alert("Error adding to watchlist. Please try again.");
     }
-  };
-
+ };
+ 
   const handleRemoveFromWatchlist = async () => {
     try {
       await axios.post(`${SERVER_WATCHLIST_URL}/remove`, {
@@ -165,25 +225,9 @@ const TitleDetail = ({ theme }) => {
     }
   };
 
-  const getDownloadStatus = (type, seasonNum = null, episodeNum = null) => {
-    if (type === 'movie') {
-      const status = downloadStatus.movies;
-      if (!status) return null;
-      
-      if (status.downloading) return <span className="badge bg-primary"><FaDownload /> Downloading</span>;
-      if (status.queued) return <span className="badge bg-warning">In Queue</span>;
-      if (status.downloaded) return <span className="badge bg-success">Downloaded</span>;
-      return null;
-    } else {
-      const status = downloadStatus.tv?.[`S${seasonNum}E${episodeNum}`];
-      if (!status) return null;
-      
-      if (status.downloading) return <span className="badge bg-primary"><FaDownload /> Downloading</span>;
-      if (status.queued) return <span className="badge bg-warning">In Queue</span>;
-      if (status.downloaded) return <span className="badge bg-success">Downloaded</span>;
-      return null;
-    }
-  };
+  if (loading) {
+    return <div className="text-center mt-5">Loading...</div>;
+  }
 
   if (!titleDetails) {
     return <Container>Title not found</Container>;
@@ -256,18 +300,17 @@ const TitleDetail = ({ theme }) => {
         {titleDetails.type === 'movie' && (
           <Row className="mb-4">
             <Col>
-              {getDownloadStatus('movie')}
-              {downloadStatus.movies?.downloaded ? (
+              {downloadStatus.movie?.downloaded ? (
                 <Button 
                   variant="success" 
-                  onClick={() => handleWatchVideo(downloadStatus.movies.path)}
+                  onClick={() => handleWatchVideo(downloadStatus.movie.path)}
                 >
                   <FaPlay className="me-2" /> Watch
                 </Button>
               ) : (
                 <Button 
                   variant="primary" 
-                  onClick={() => handleDownloadEpisode(1, 1)}
+                  onClick={handleDownloadFilm}
                 >
                   <FaDownload className="me-2" /> Download Film
                 </Button>
@@ -279,78 +322,84 @@ const TitleDetail = ({ theme }) => {
         {/* TV Show Seasons and Episodes */}
         {titleDetails.type === 'tv' && (
           <>
-            {[...Array(titleDetails.season_count)].map((_, index) => (
-              <div key={index} className="mb-4">
-                <h4 className="d-flex justify-content-between align-items-center">
-                  <span>Season {index + 1}</span>
-                  <Button 
-                    variant="primary"
-                    onClick={() => handleDownloadSeason(index + 1)}
-                    className="me-2"
-                  >
-                    <FaDownload /> Download Season
-                  </Button>
-                </h4>
-                <Row xs={2} md={4} className="g-4">
-                  {episodes.filter(ep => ep.season === index + 1).map((episode) => {
-                    const episodeKey = `S${selectedSeason}E${episode.number}`;
-                    const isDownloaded = downloadStatus.tv?.[episodeKey]?.downloaded;
-                    
-                    return (
-                      <Col key={episode.id}>
-                        <div className="episode-thumbnail-wrapper position-relative">
-                          <Image 
-                            src={episode.image} 
-                            alt={`Episode ${episode.number}`} 
-                            fluid 
-                            rounded 
-                            className="mb-2"
-                          />
-                          <div 
-                            className="episode-number position-absolute top-0 start-0 m-2 px-2 py-1" 
-                            style={{
-                              backgroundColor: 'rgba(255, 255, 255, 0.7)', 
-                              color: '#333', 
-                              borderRadius: '4px',
-                              fontSize: '0.8rem'
-                            }}
-                          >
-                            Ep {episode.number}
-                          </div>
-                          <h6>{episode.name}</h6>
-                          
-                          {getDownloadStatus('tv', selectedSeason, episode.number)}
-                          {isDownloaded ? (
-                            <Button 
-                              variant="success" 
-                              onClick={() => handleWatchVideo(downloadStatus.tv[episodeKey].path)}
-                            >
-                              <FaPlay className="me-2" /> Watch
-                            </Button>
-                          ) : (
-                            <Button 
-                              variant="primary" 
-                              onClick={() => handleDownloadEpisode(selectedSeason, episode.number)}
-                            >
-                              <FaDownload className="me-2" /> Download
-                            </Button>
-                          )}
-                        </div>
-                      </Col>
-                    );
-                  })}
-                </Row>
-              </div>
-            ))}
+            <Row className="mb-3">
+              <Col>
+                <Dropdown>
+                  <Dropdown.Toggle variant="secondary">
+                    Season {selectedSeason}
+                  </Dropdown.Toggle>
+
+                  <Dropdown.Menu>
+                    {[...Array(titleDetails.season_count)].map((_, index) => (
+                      <Dropdown.Item 
+                        key={index + 1} 
+                        onClick={() => handleSeasonSelect(index + 1)}
+                      >
+                        Season {index + 1}
+                      </Dropdown.Item>
+                    ))}
+                  </Dropdown.Menu>
+                </Dropdown>
+              </Col>
+            </Row>
+
+            <Row xs={2} md={4} className="g-4">
+              {episodes.map((episode) => {
+                const episodeKey = `S${selectedSeason}E${episode.number}`;
+                const isDownloaded = downloadStatus.tv?.[episodeKey]?.downloaded;
+                
+                return (
+                  <Col key={episode.id}>
+                    <div className="episode-thumbnail-wrapper position-relative">
+                      <Image 
+                        src={episode.image} 
+                        alt={`Episode ${episode.number}`} 
+                        fluid 
+                        rounded 
+                        className="mb-2"
+                      />
+                      <div 
+                        className="episode-number position-absolute top-0 start-0 m-2 px-2 py-1" 
+                        style={{
+                          backgroundColor: 'rgba(255, 255, 255, 0.7)', 
+                          color: '#333', 
+                          borderRadius: '4px',
+                          fontSize: '0.8rem'
+                        }}
+                      >
+                        Ep {episode.number}
+                      </div>
+                      <h6>{episode.name}</h6>
+                      
+                      {isDownloaded ? (
+                        <Button 
+                          variant="success" 
+                          onClick={() => handleWatchVideo(downloadStatus.tv[episodeKey].path)}
+                        >
+                          <FaPlay className="me-2" /> Watch
+                        </Button>
+                      ) : (
+                        <Button 
+                          variant="primary" 
+                          onClick={() => handleDownloadEpisode(selectedSeason, episode.number, titleDetails.id, titleDetails.slug)}
+                        >
+                          <FaDownload className="me-2" /> Download
+                        </Button>
+                      )}
+                    </div>
+                  </Col>
+                );
+              })}
+            </Row>
           </>
         )}
       </Container>
 
       {/* Modal Video Player */}
-      <Modal show={false} onHide={() => {}} size="lg" centered>
+      <Modal show={showPlayer} onHide={() => setShowPlayer(false)} size="lg" centered>
         <Modal.Body>
           <video 
-            src="" 
+            src={`${API_URL}/downloaded/${currentVideo}`} 
             controls 
             autoPlay 
             style={{ width: '100%' }}
@@ -362,7 +411,8 @@ const TitleDetail = ({ theme }) => {
 };
 
 TitleDetail.propTypes = {
-  theme: PropTypes.string.isRequired
+  toggleTheme: PropTypes.func.isRequired,
+  theme: PropTypes.oneOf(['light', 'dark']).isRequired,
 };
 
 export default TitleDetail;
