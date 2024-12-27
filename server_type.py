@@ -3,7 +3,13 @@
 import datetime
 from pydantic import BaseModel
 from typing import Optional, Dict, List
+from enum import Enum
 
+class DownloadStatus(Enum):
+    QUEUED = "queued"
+    DOWNLOADING = "downloading"
+    COMPLETED = "completed"
+    FAILED = "failed"
 
 class WatchlistItem(BaseModel):
     name: str

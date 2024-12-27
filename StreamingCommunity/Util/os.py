@@ -440,7 +440,12 @@ class OsSummary:
         python_implementation = platform.python_implementation()
         arch = platform.machine()
         os_info = platform.platform()
-        glibc_version = 'glibc ' + '.'.join(map(str, platform.libc_ver()[1]))
+        
+        # Get libc version only on Unix-like systems
+        if platform.system() != "Windows":
+            glibc_version = 'glibc ' + '.'.join(map(str, platform.libc_ver()[1]))
+        else:
+            glibc_version = 'N/A'  # Not applicable on Windows
         
         console.print(f"[cyan]Python[white]: [bold red]{python_version} ({python_implementation} {arch}) - {os_info} ({glibc_version})[/bold red]")
         logging.info(f"Python: {python_version} ({python_implementation} {arch}) - {os_info} ({glibc_version})")

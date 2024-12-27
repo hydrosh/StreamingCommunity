@@ -6,7 +6,8 @@ import logging
 import datetime
 from urllib.parse import urlparse, unquote
 from typing import Optional
-
+import threading
+import time
 
 # External
 import uvicorn
@@ -16,16 +17,14 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-
 # Util
 from StreamingCommunity.Util.os import os_summary
 os_summary.get_system_summary()
 from StreamingCommunity.Util.logger import Logger
-log = Logger()
+Logger()  # Initialize logging configuration
 from StreamingCommunity.Util._jsonConfig import config_manager
 from server_type import WatchlistItem, UpdateWatchlistItem
 from server_util import updateUrl
-
 
 # Internal
 from StreamingCommunity.Api.Template.Class.SearchType import MediaItem
@@ -34,10 +33,8 @@ from StreamingCommunity.Api.Site.streamingcommunity.film import download_film
 from StreamingCommunity.Api.Site.streamingcommunity.series import download_video
 from StreamingCommunity.Api.Site.streamingcommunity.util.ScrapeSerie import ScrapeSerie
 
-
 # Player
 from StreamingCommunity.Api.Player.vixcloud import VideoSource
-
 
 # Variable
 app = FastAPI()
@@ -49,6 +46,10 @@ app.add_middleware(
     allow_headers=["*"]
 )
 
+# Download configuration
+MAX_CONCURRENT_DOWNLOADS = 1  # Default to 1 concurrent download
+active_downloads = set()  # Set to track active downloads
+download_queue_lock = threading.Lock()
 
 # Site variable
 version, domain = get_version_and_domain()
@@ -59,14 +60,80 @@ video_source = VideoSource("streamingcommunity", True)
 DOWNLOAD_DIRECTORY = os.getcwd()
 console = Console()
 
-
 # Mongo variable
 client = MongoClient(config_manager.get("EXTRA", "mongodb"))
 db = client[config_manager.get("EXTRA", "database")]
 watchlist_collection = db['watchlist']
-downloads_collection = db['downloads'] 
+downloads_collection = db['downloads']
 
+def process_download_queue():
+    while True:
+        with download_queue_lock:
+            # Check if we can start new downloads
+            if len(active_downloads) < MAX_CONCURRENT_DOWNLOADS:
+                # Get next queued item
+                next_download = downloads_collection.find_one(
+                    {"status": "queued"}, 
+                    sort=[("timestamp", 1)]
+                )
+                
+                if next_download:
+                    download_id = str(next_download["_id"])
+                    if download_id not in active_downloads:
+                        active_downloads.add(download_id)
+                        logging.info(f"Starting download of {next_download['type']}: {next_download['slug']}")
+                        downloads_collection.update_one(
+                            {"_id": next_download["_id"]},
+                            {"$set": {"status": "downloading"}}
+                        )
+                        
+                        try:
+                            if next_download["type"] == "movie":
+                                logging.info(f"Downloading movie: {next_download['slug']}")
+                                item_media = MediaItem(**{'id': next_download["id"], 'slug': next_download["slug"]})
+                                path_download = download_film(item_media)
+                            else:  # TV episode
+                                logging.info(f"Downloading episode S{next_download['season']}E{next_download['episode']} of {next_download['slug']}")
+                                path_download = download_video(
+                                    next_download["slug"], 
+                                    next_download["season"],
+                                    next_download["episode"],
+                                    scrape_serie,
+                                    video_source
+                                )
+                            
+                            logging.info(f"Download completed: {path_download}")
+                            # Update status to completed
+                            downloads_collection.update_one(
+                                {"_id": next_download["_id"]},
+                                {"$set": {
+                                    "status": "completed",
+                                    "path": path_download,
+                                    "completed_at": datetime.datetime.now(datetime.timezone.utc)
+                                }}
+                            )
+                        except Exception as e:
+                            logging.error(f"Download failed: {str(e)}")
+                            downloads_collection.update_one(
+                                {"_id": next_download["_id"]},
+                                {"$set": {
+                                    "status": "failed",
+                                    "error": str(e)
+                                }}
+                            )
+                        finally:
+                            active_downloads.remove(download_id)
+                else:
+                    logging.debug("No items in queue")
+            else:
+                logging.debug(f"Maximum concurrent downloads ({MAX_CONCURRENT_DOWNLOADS}) reached")
+        
+        time.sleep(1)  # Prevent CPU overload
 
+# Start download queue processor in background
+download_queue_thread = threading.Thread(target=process_download_queue, daemon=False)
+download_queue_thread.start()
+logging.info(f"Download queue processor started (max concurrent downloads: {MAX_CONCURRENT_DOWNLOADS})")
 
 # ---------- SITE API ------------
 @app.get("/", summary="Health Check")
@@ -92,7 +159,6 @@ async def get_info_title(url: Optional[str] = Query(None)):
     if not url or "http" not in url:
         logging.warning("GetInfo request without URL parameter")
         raise HTTPException(status_code=400, detail="Missing URL parameter")
-    
     
     try:
         result = get_infoSelectTitle(url, domain, version)
@@ -145,7 +211,6 @@ async def get_domain():
         logging.error(f"Error retrieving domain: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to retrieve domain information")
 
-
 # ---------- DOWNLOAD API ------------
 @app.get("/api/download/film")
 async def call_download_film(id: Optional[str] = Query(None), slug: Optional[str] = Query(None)):
@@ -154,71 +219,178 @@ async def call_download_film(id: Optional[str] = Query(None), slug: Optional[str
         raise HTTPException(status_code=400, detail="Missing film ID or slug")
     
     try:
-        item_media = MediaItem(**{'id': id, 'slug': slug})
-        path_download = download_film(item_media)
+        # Check if already in downloads
+        existing_download = downloads_collection.find_one({
+            "type": "movie",
+            "id": id,
+            "status": {"$in": ["queued", "downloading", "completed"]}
+        })
+        
+        if existing_download:
+            status = existing_download["status"]
+            if status == "completed":
+                return {"status": "completed", "path": existing_download["path"]}
+            return {"status": status}
 
+        # Add to queue
         download_data = {
             'type': 'movie',
             'id': id,
             'slug': slug,
-            'path': path_download,
+            'status': 'queued',
             'timestamp': datetime.datetime.now(datetime.timezone.utc)
         }
-        downloads_collection.insert_one(download_data) 
-
-        logging.info(f"Film downloaded: {slug}")
-        return {"path": path_download}
+        downloads_collection.insert_one(download_data)
+        
+        logging.info(f"Film queued for download: {slug}")
+        return {"status": "queued"}
     
     except Exception as e:
-        logging.error(f"Error downloading film: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to download film")
+        logging.error(f"Error queueing film: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to queue film")
 
 @app.get("/api/download/episode")
-async def call_download_episode(n_s: Optional[int] = Query(None), n_ep: Optional[int] = Query(None), titleID: Optional[int] = Query(None), slug: Optional[str] = Query(None)):
-    global scrape_serie
-
-    if not n_s or not n_ep:
+async def call_download_episode(
+    n_s: Optional[int] = Query(None),
+    n_ep: Optional[int] = Query(None),
+    titleID: Optional[int] = Query(None),
+    slug: Optional[str] = Query(None)
+):
+    if not all([n_s, n_ep, titleID, slug]):
         logging.warning("Download episode request with missing parameters")
-        raise HTTPException(status_code=400, detail="Missing season or episode number")
+        raise HTTPException(status_code=400, detail="Missing required parameters")
     
     try:
+        # Check if already in downloads
+        existing_download = downloads_collection.find_one({
+            "type": "tv",
+            "id": titleID,
+            "season": n_s,
+            "episode": n_ep,
+            "status": {"$in": ["queued", "downloading", "completed"]}
+        })
+        
+        if existing_download:
+            status = existing_download["status"]
+            if status == "completed":
+                return {"status": "completed", "path": existing_download["path"]}
+            return {"status": status}
 
-        scrape_serie.setup(
-            version=version, 
-            media_id=int(titleID), 
-            series_name=slug
-        )
-        video_source.setup(int(titleID))
-
-        scrape_serie.collect_info_title()
-        scrape_serie.collect_info_season(n_s)
-
-        path_download = download_video(
-            season_name, 
-            n_s, 
-            n_ep, 
-            scrape_serie, 
-            video_source
-        )
-
+        # Add to queue
         download_data = {
             'type': 'tv',
-            'id': scrape_serie.media_id,
-            'slug': scrape_serie.series_name,
-            'n_s': n_s,
-            'n_ep': n_ep,
-            'path': path_download,
+            'id': titleID,
+            'slug': slug,
+            'season': n_s,
+            'episode': n_ep,
+            'status': 'queued',
             'timestamp': datetime.datetime.now(datetime.timezone.utc)
         }
+        downloads_collection.insert_one(download_data)
+        
+        logging.info(f"Episode queued for download: {slug} S{n_s}E{n_ep}")
+        return {"status": "queued"}
 
-        downloads_collection.insert_one(download_data) 
-
-        logging.info(f"Episode downloaded: S{n_s}E{n_ep}")
-        return {"path": path_download}
-    
     except Exception as e:
-        logging.error(f"Error downloading episode: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to download episode")
+        logging.error(f"Error queueing episode: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to queue episode")
+
+@app.get("/api/download/season")
+async def download_season(
+    season: Optional[str] = Query(None),
+    titleID: Optional[str] = Query(None),
+    slug: Optional[str] = Query(None)
+):
+    if not all([season, titleID, slug]):
+        logging.warning("Download season request with missing parameters")
+        raise HTTPException(status_code=400, detail="Missing required parameters")
+    
+    try:
+        # Get season info to get episode count
+        season_info = get_infoSelectSeason(slug, season)
+        if not season_info:
+            raise HTTPException(status_code=404, detail="Season not found")
+
+        # Get total episodes in season
+        total_episodes = len(season_info.get('episodes', []))
+        if total_episodes == 0:
+            raise HTTPException(status_code=404, detail="No episodes found in season")
+
+        queued_episodes = []
+        # Queue each episode for download
+        for episode_num in range(1, total_episodes + 1):
+            download_data = {
+                "type": "tv",
+                "id": titleID,
+                "slug": slug,
+                "season": int(season),
+                "episode": episode_num,
+                "status": "queued",
+                "timestamp": datetime.datetime.now(datetime.timezone.utc)
+            }
+            
+            # Check if this episode is already in the queue or completed
+            existing = downloads_collection.find_one({
+                "type": "tv",
+                "id": titleID,
+                "slug": slug,
+                "season": int(season),
+                "episode": episode_num,
+                "status": {"$in": ["queued", "downloading", "completed"]}
+            })
+            
+            if not existing:
+                downloads_collection.insert_one(download_data)
+                queued_episodes.append({
+                    "episode": episode_num,
+                    "status": "queued"
+                })
+            else:
+                queued_episodes.append({
+                    "episode": episode_num,
+                    "status": existing["status"]
+                })
+        
+        logging.info(f"Season queued for download: {slug} S{season}")
+        return {"status": "queued", "episodes": queued_episodes}
+
+    except Exception as e:
+        logging.error(f"Error queueing season: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to queue season")
+
+@app.get("/api/downloads/status")
+async def get_download_status():
+    """Get the current download status and queue"""
+    try:
+        # Get all downloads with their status
+        downloads = list(downloads_collection.find(
+            {}, 
+            {'_id': 0}
+        ).sort("timestamp", 1))
+
+        # Separate downloads by status
+        active = [d for d in downloads if d["status"] == "downloading"]
+        queued = [d for d in downloads if d["status"] == "queued"]
+        
+        return {
+            "active_downloads": active,
+            "queue": queued,
+            "max_concurrent": MAX_CONCURRENT_DOWNLOADS
+        }
+    except Exception as e:
+        logging.error(f"Error getting download status: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to get download status")
+
+@app.put("/api/downloads/config")
+async def update_download_config(max_concurrent: int):
+    """Update download configuration"""
+    global MAX_CONCURRENT_DOWNLOADS
+    if max_concurrent < 1:
+        raise HTTPException(status_code=400, detail="Max concurrent downloads must be at least 1")
+    
+    MAX_CONCURRENT_DOWNLOADS = max_concurrent
+    logging.info(f"Updated max concurrent downloads to: {MAX_CONCURRENT_DOWNLOADS}")
+    return {"max_concurrent": MAX_CONCURRENT_DOWNLOADS}
 
 @app.get("/api/downloaded/{filename:path}")
 async def serve_downloaded_file(filename: str):
@@ -227,25 +399,34 @@ async def serve_downloaded_file(filename: str):
         decoded_filename = unquote(filename)
         logging.info(f"Decoded filename: {decoded_filename}")
 
-        # Normalizza il percorso
-        file_path = os.path.normpath(os.path.join(DOWNLOAD_DIRECTORY, decoded_filename))
+        # Cerca il file nel database
+        file_info = downloads_collection.find_one(
+            {"path": {"$regex": f".*{decoded_filename}$"}},
+            {"_id": 0, "path": 1}
+        )
 
-        # Verifica che il file sia all'interno della directory
-        if not file_path.startswith(os.path.abspath(DOWNLOAD_DIRECTORY)):
-            logging.error(f"Path traversal attempt detected: {file_path}")
-            raise HTTPException(status_code=400, detail="Invalid file path")
+        if not file_info:
+            logging.error(f"File not found in database: {decoded_filename}")
+            raise HTTPException(status_code=404, detail="File not found")
+
+        file_path = file_info["path"]
+        logging.info(f"Found file path: {file_path}")
 
         # Verifica che il file esista
-        if not os.path.isfile(file_path):
-            logging.error(f"File not found: {file_path}")
+        if not os.path.exists(file_path):
+            logging.error(f"File not found on disk: {file_path}")
             raise HTTPException(status_code=404, detail="File not found")
 
         # Restituisci il file
-        return FileResponse(file_path)
+        return FileResponse(
+            file_path,
+            media_type="video/mp4",
+            filename=os.path.basename(file_path)
+        )
+
     except Exception as e:
         logging.error(f"Error serving file: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
-
 
 # ---------- WATCHLIST UTIL MONGO ------------
 @app.post("/server/watchlist/add")
@@ -347,7 +528,6 @@ async def get_new_season():
 
     return {"message": "Nessuna nuova stagione disponibile"}
 
-
 # ---------- DOWNLOAD UTIL MONGO ------------
 def ensure_collections_exist(db):
     required_collections = ['watchlist', 'downloads']
@@ -360,7 +540,6 @@ def ensure_collections_exist(db):
             logging.info(f"Created missing collection: {collection_name}")
         else:
             logging.info(f"Collection already exists: {collection_name}")
-
 
 @app.get("/server/path/get")
 async def fetch_all_downloads():
@@ -470,9 +649,7 @@ async def remove_movie(movie_id: str = Query(...)):
     downloads_collection.delete_one({'type': 'movie', 'id': movie_id})
     return {"success": True}
 
-
 if __name__ == "__main__":
-
     ensure_collections_exist(db)
     uvicorn.run(
         "server:app",
