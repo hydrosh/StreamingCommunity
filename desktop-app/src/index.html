@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StreamingCommunity</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="styles.css" rel="stylesheet">
+</head>
+<body class="bg-gray-900 text-white">
+    <!-- Sidebar -->
+    <div class="fixed top-0 left-0 h-full w-64 bg-gray-800 p-4">
+        <div class="mb-8">
+            <h1 class="text-2xl font-bold">StreamingCommunity</h1>
+        </div>
+        <nav>
+            <ul class="space-y-2">
+                <li>
+                    <a href="#" class="flex items-center p-2 hover:bg-gray-700 rounded" data-page="home">
+                        <i class="fas fa-home w-6"></i>
+                        <span>Home</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="#" class="flex items-center p-2 hover:bg-gray-700 rounded" data-page="search">
+                        <i class="fas fa-search w-6"></i>
+                        <span>Cerca</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="#" class="flex items-center p-2 hover:bg-gray-700 rounded" data-page="watchlist">
+                        <i class="fas fa-list w-6"></i>
+                        <span>Watchlist</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="#" class="flex items-center p-2 hover:bg-gray-700 rounded" data-page="downloads">
+                        <i class="fas fa-download w-6"></i>
+                        <span>Download</span>
+                    </a>
+                </li>
+            </ul>
+        </nav>
+    </div>
+
+    <!-- Main Content -->
+    <div class="ml-64 p-8">
+        <!-- Home Page -->
+        <div id="home-page" class="page active">
+            <h2 class="text-3xl font-bold mb-6">Novità</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6" id="latest-content">
+                <!-- Content will be loaded dynamically -->
+            </div>
+        </div>
+
+        <!-- Search Page -->
+        <div id="search-page" class="page hidden">
+            <div class="mb-6">
+                <input type="text" id="search-input" 
+                       class="w-full p-4 bg-gray-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                       placeholder="Cerca film e serie TV...">
+            </div>
+            <div id="search-results" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                <!-- Search results will be loaded here -->
+            </div>
+        </div>
+
+        <!-- Watchlist Page -->
+        <div id="watchlist-page" class="page hidden">
+            <h2 class="text-3xl font-bold mb-6">La tua Watchlist</h2>
+            <div id="watchlist-content" class="grid grid-cols-1 gap-4">
+                <!-- Watchlist items will be loaded here -->
+            </div>
+        </div>
+
+        <!-- Downloads Page -->
+        <div id="downloads-page" class="page hidden">
+            <h2 class="text-3xl font-bold mb-6">Download</h2>
+            <div id="downloads-list" class="space-y-4">
+                <!-- Downloads will be loaded here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Video Player Modal -->
+    <div id="video-player-modal" class="fixed inset-0 bg-black bg-opacity-90 hidden flex items-center justify-center z-50">
+        <div class="w-full h-full max-w-6xl max-h-[80vh] relative">
+            <button id="close-player" class="absolute top-4 right-4 text-white hover:text-gray-300">
+                <i class="fas fa-times text-2xl"></i>
+            </button>
+            <video id="video-player" class="w-full h-full" controls>
+                <source src="" type="video/mp4">
+                Your browser does not support the video tag.
+            </video>
+        </div>
+    </div>
+
+    <!-- Notification Container -->
+    <div id="notification-container" class="fixed bottom-4 right-4 z-50">
+        <!-- Notifications will be added here -->
+    </div>
+
+    <script src="app.js" type="module"></script>
+</body>
+</html>
