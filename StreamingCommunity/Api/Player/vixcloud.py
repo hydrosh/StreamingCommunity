@@ -86,16 +86,47 @@ class VideoSource:
             script_text (str): Raw JavaScript/HTML script content
         """
         try:
+            # Parse the JavaScript content
             converter = JavaScriptParser.parse(js_string=str(script_text))
-
-            # Create window video, streams and parameter objects
-            self.canPlayFHD = bool(converter.get('canPlayFHD'))
-            self.window_video = WindowVideo(converter.get('video'))
-            self.window_streams = StreamsCollection(converter.get('streams'))
-            self.window_parameter = WindowParameter(converter.get('masterPlaylist'))
+            if not converter:
+                raise Exception("Failed to parse JavaScript content")
+                
+            logging.info("Parsed JavaScript content successfully")
+            
+            # Create window video object
+            video_data = converter.get('video')
+            if not video_data:
+                raise Exception("No video data found in parsed content")
+            self.window_video = WindowVideo(video_data)
+            
+            # Create streams collection
+            streams_data = converter.get('streams')
+            if not streams_data:
+                raise Exception("No streams data found in parsed content")
+            self.window_streams = StreamsCollection(streams_data)
+            
+            # Create window parameter object and verify required fields
+            playlist_data = converter.get('masterPlaylist')
+            if not playlist_data:
+                raise Exception("No masterPlaylist data found in parsed content")
+                
+            if not playlist_data.get('url'):
+                raise Exception("No playlist URL found in masterPlaylist")
+                
+            if not playlist_data.get('params', {}).get('token'):
+                raise Exception("No token found in masterPlaylist params")
+                
+            if not playlist_data.get('params', {}).get('expires'):
+                raise Exception("No expiration found in masterPlaylist params")
+                
+            self.window_parameter = WindowParameter(playlist_data)
+            logging.info(f"Created window parameter with URL: {self.window_parameter.url}")
+            
+            # Set FHD capability
+            self.canPlayFHD = bool(converter.get('canPlayFHD', False))
 
         except Exception as e:
-            logging.error(f"Error parsing script: {e}")
+            logging.error(f"Error parsing script: {str(e)}")
             raise
 
     def get_content(self) -> None:
@@ -108,30 +139,36 @@ class VideoSource:
             - Parse embedded script
         """
         try:
-            if self.iframe_src is not None:
+            if not hasattr(self, 'iframe_src') or not self.iframe_src:
+                raise Exception("No iframe source available")
 
-                # Make a request to get content
-                try:
-                    response = httpx.get(
-                        url=self.iframe_src, 
-                        headers=self.headers, 
-                        timeout=max_timeout
-                    )
-                    response.raise_for_status()
+            # Make a request to get content
+            logging.info(f"Fetching content from iframe: {self.iframe_src}")
+            try:
+                response = httpx.get(
+                    url=self.iframe_src, 
+                    headers=self.headers, 
+                    timeout=max_timeout
+                )
+                response.raise_for_status()
 
-                except Exception as e:
-                    logging.error(f"Failed to get vixcloud contente with error: {e}")
-                    sys.exit(0)
+            except Exception as e:
+                raise Exception(f"Failed to get vixcloud content: {str(e)}")
 
-                # Parse response with BeautifulSoup to get content
-                soup = BeautifulSoup(response.text, "html.parser")
-                script = soup.find("body").find("script").text
-
-                # Parse script to get video information
-                self.parse_script(script_text=script)
+            # Parse response with BeautifulSoup to get content
+            soup = BeautifulSoup(response.text, "html.parser")
+            script = soup.find("body").find("script")
+            
+            if not script or not script.text:
+                raise Exception("No script content found in iframe response")
+                
+            logging.info("Successfully retrieved script content")
+            
+            # Parse script to get video information
+            self.parse_script(script_text=script.text)
 
         except Exception as e:
-            logging.error(f"Error getting content: {e}")
+            logging.error(f"Error getting content: {str(e)}")
             raise
 
     def get_playlist(self) -> str:
@@ -141,32 +178,51 @@ class VideoSource:
         Returns:
             str: Fully constructed playlist URL with authentication parameters
         """
-        # Initialize parameters dictionary
-        params = {}
+        try:
+            if not hasattr(self, 'window_parameter') or not self.window_parameter:
+                logging.error("window_parameter not initialized")
+                return None
+                
+            if not self.window_parameter.url:
+                logging.error("window_parameter.url is empty")
+                return None
 
-        # Add 'h' parameter if video quality is 1080p
-        if self.canPlayFHD:
-            params['h'] = 1
+            # Initialize parameters dictionary
+            params = {}
 
-        # Parse the original URL
-        parsed_url = urlparse(self.window_parameter.url)
-        query_params = parse_qs(parsed_url.query)
+            # Add 'h' parameter if video quality is 1080p
+            if hasattr(self, 'canPlayFHD') and self.canPlayFHD:
+                params['h'] = 1
 
-        # Check specifically for 'b=1' in the query parameters
-        if 'b' in query_params and query_params['b'] == ['1']:
-            params['b'] = 1
+            # Parse the original URL
+            parsed_url = urlparse(self.window_parameter.url)
+            query_params = parse_qs(parsed_url.query)
 
-        # Add authentication parameters (token and expiration)
-        params.update({
-            "token": self.window_parameter.token,
-            "expires": self.window_parameter.expires
-        })
+            # Check specifically for 'b=1' in the query parameters
+            if 'b' in query_params and query_params['b'] == ['1']:
+                params['b'] = 1
 
-        # Build the updated query string
-        query_string = urlencode(params)
+            # Add authentication parameters (token and expiration)
+            if self.window_parameter.token and self.window_parameter.expires:
+                params.update({
+                    "token": self.window_parameter.token,
+                    "expires": self.window_parameter.expires
+                })
+            else:
+                logging.error("Missing token or expires in window_parameter")
+                return None
 
-        # Construct the new URL with updated query parameters
-        return urlunparse(parsed_url._replace(query=query_string))
+            # Build the updated query string
+            query_string = urlencode(params)
+
+            # Construct the new URL with updated query parameters
+            url = urlunparse(parsed_url._replace(query=query_string))
+            logging.info(f"Generated playlist URL: {url}")
+            return url
+
+        except Exception as e:
+            logging.error(f"Error generating playlist URL: {str(e)}")
+            return None
 
     def get_mp4(self, url_to_download: str, scws_id: str) -> list:
         """

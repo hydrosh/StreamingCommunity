@@ -32,7 +32,7 @@ from ...M3U8 import (
     M3U8_UrlFix
 )
 from .segments import M3U8_Segments
-
+from .progress import ProgressCallback
 
 # Config
 DOWNLOAD_SPECIFIC_AUDIO = config_manager.get_list('M3U8_DOWNLOAD', 'specific_list_audio')            
@@ -52,7 +52,6 @@ max_timeout = config_manager.get_int("REQUESTS", "timeout")
 headers_index = config_manager.get_dict('REQUESTS', 'user-agent')
 m3u8_url_fixer = M3U8_UrlFix()
 list_MissingTs = []
-
 
 
 class PathManager:
@@ -139,11 +138,14 @@ class HttpClient:
 
 
 class ContentExtractor:
-    def __init__(self):
+    def __init__(self, progress_callback=None):
         """
         This class is responsible for extracting audio, subtitle, and video information from an M3U8 playlist.
+        
+        Args:
+            progress_callback (callable): Optional callback function to receive progress updates.
         """
-        pass
+        self.progress_callback = progress_callback
 
     def start(self, obj_parse: M3U8_Parser):
         """
@@ -152,13 +154,26 @@ class ContentExtractor:
         Args:
             obj_parse (str): The M3U8_Parser obj of the M3U8 playlist.
         """
+        if self.progress_callback:
+            self.progress_callback(0)  # Just pass the progress value
 
+        # Store the M3U8_Parser object
         self.obj_parse = obj_parse
 
-        # Collect audio, subtitle, and video information
+        # Store information about available media
+        self.available_audio = []
+        self.available_subtitle = []
+        self.available_video = None
+        self.video_res = None
+        self.codec = None
+
+        # Collect media information
         self._collect_audio()
         self._collect_subtitle()
         self._collect_video()
+
+        if self.progress_callback:
+            self.progress_callback(100)  # Just pass the progress value
 
     def _collect_audio(self):
         """
@@ -263,13 +278,16 @@ class ContentExtractor:
 
             # Check if a valid HTTPS URL is obtained
             if self.m3u8_index is not None and "https" in self.m3u8_index:
-                #console.print(f"[cyan]Found m3u8 index [white]=> [red]{self.m3u8_index}")
                 print()
 
             else:
                 logging.error("[download_m3u8] Can't find a valid m3u8 index")
                 raise ValueError("Invalid m3u8 index URL")
-            
+
+        # Signal that video info collection is complete
+        if self.progress_callback:
+            self.progress_callback(10)  # Just pass the progress value
+
 
 class DownloadTracker:
     def __init__(self, path_manager: PathManager):
@@ -365,14 +383,16 @@ class DownloadTracker:
 
 
 class ContentDownloader:
-    def __init__(self):
+    def __init__(self, progress_callback=None):
         """
         Initializes the ContentDownloader class.
 
         Attributes:
             expected_real_time (float): Expected real-time duration of the video download.
+            progress_callback (callable): Optional callback function to receive progress updates.
         """
         self.expected_real_time = None
+        self.progress_callback = progress_callback
 
     def download_video(self, downloaded_video):
         """
@@ -381,30 +401,36 @@ class ContentDownloader:
         Args:
             downloaded_video (list): A list containing information about the video to download.
         """
-        logging.info(f"class 'ContentDownloader'; call download_video() with parameter: {downloaded_video}")
+        if not downloaded_video:
+            return
 
-        # Check if the video file already exists
-        if not os.path.exists(downloaded_video[0].get('path')):
-            folder_name = os.path.dirname(downloaded_video[0].get('path'))
+        for video in downloaded_video:
+            # Check if the video file already exists
+            if not os.path.exists(video.get('path')):
+                folder_name = os.path.dirname(video.get('path'))
 
-            # Create an instance of M3U8_Segments to handle video segments download
-            video_m3u8 = M3U8_Segments(downloaded_video[0].get('url'), folder_name)
+                # Create an instance of M3U8_Segments to handle video segments download
+                video_m3u8 = M3U8_Segments(
+                    video.get('url'), 
+                    folder_name,
+                    progress_callback=self.progress_callback
+                )
 
-            # Get information about the video segments (e.g., duration, ts files to download)
-            video_m3u8.get_info()
+                # Get information about the video segments
+                video_m3u8.get_info()
 
-            # Store the expected real-time duration of the video
-            self.expected_real_time = video_m3u8.expected_real_time
+                # Store the expected real-time duration of the video
+                self.expected_real_time = video_m3u8.expected_real_time
 
-            # Download the video streams and print status
-            info_dw = video_m3u8.download_streams(f"{Colors.MAGENTA}video", "video")
-            list_MissingTs.append(info_dw)
+                # Download the video streams and print status
+                info_dw = video_m3u8.download_streams(f"{Colors.MAGENTA}video", "video")
+                list_MissingTs.append(info_dw)
 
-            # Print duration information of the downloaded video
-            #print_duration_table(downloaded_video[0].get('path'))
+            else:
+                console.log("[cyan]Video [red]already exists.")
 
-        else:
-            console.log("[cyan]Video [red]already exists.")
+        if self.progress_callback:
+            self.progress_callback(100)  # Signal completion with 100% progress
 
     def download_audio(self, downloaded_audio):
         """
@@ -422,7 +448,11 @@ class ContentDownloader:
             if not os.path.exists(obj_audio.get('path')):
 
                 # Create an instance of M3U8_Segments to handle audio segments download
-                audio_m3u8 = M3U8_Segments(obj_audio.get('url'), folder_name)
+                audio_m3u8 = M3U8_Segments(
+                    obj_audio.get('url'), 
+                    folder_name,
+                    progress_callback=self.progress_callback
+                )
 
                 # Get information about the audio segments (e.g., duration, ts files to download)
                 audio_m3u8.get_info()
@@ -436,6 +466,9 @@ class ContentDownloader:
 
             else:
                 console.log(f"[cyan]Audio [white]([green]{obj_audio.get('language')}[white]) [red]already exists.")
+
+        if self.progress_callback:
+            self.progress_callback(100)  # Signal completion with 100% progress
 
     def download_subtitle(self, downloaded_subtitle):
         """
@@ -468,16 +501,21 @@ class ContentDownloader:
             with open(obj_subtitle.get("path"), "wb") as f:
                 f.write(HttpClient().get_content(m3u8_sub_parser.subtitle[-1]))
 
+        if self.progress_callback:
+            self.progress_callback(100)  # Signal completion with 100% progress
+
 
 class ContentJoiner:
-    def __init__(self, path_manager):
+    def __init__(self, path_manager, progress_callback=None):
         """
         Initializes the ContentJoiner class.
 
         Args:
             path_manager (PathManager): An instance of PathManager to manage output paths.
+            progress_callback (callable): Optional callback function to receive progress updates.
         """
         self.path_manager: PathManager = path_manager
+        self.progress_callback = progress_callback
 
     def setup(self, downloaded_video, downloaded_audio, downloaded_subtitle, codec = None):
         """
@@ -500,10 +538,8 @@ class ContentJoiner:
         self.there_is_subtitle = len(downloaded_subtitle) > 0
 
         if self.there_is_audio or self.there_is_subtitle:
-
             # Display the status of available media
             table = Table(show_header=False, box=None)
-
             table.add_row(f"[green]Video - audio", f"[yellow]{self.there_is_audio}")
             table.add_row(f"[green]Video - Subtitle", f"[yellow]{self.there_is_subtitle}")
 
@@ -515,74 +551,79 @@ class ContentJoiner:
         # Start the joining process
         self.conversione()
 
+        # Signal completion after joining
+        if self.progress_callback:
+            self.progress_callback(100)  # Signal completion with 100% progress
+
     def conversione(self):
         """
         Handles the joining of video, audio, and subtitles based on availability.
         """
+        if self.progress_callback:
+            self.progress_callback(0)  # Signal start of joining
 
         # Join audio and video if audio is available
         if self.there_is_audio:
             if MERGE_AUDIO:
-
+                if self.progress_callback:
+                    self.progress_callback(25)  # Signal joining audio
                 # Join video with audio tracks
                 self.converted_out_path = self._join_video_audio()
-
             else:
-
                 # Process each available audio track
                 for obj_audio in self.downloaded_audio:
                     language = obj_audio.get('language')
                     path = obj_audio.get('path')
-
                     # Set the new path for regular audio
                     new_path = self.path_manager.output_filename.replace(".mp4", f"_{language}.mp4")
-
                     try:
-
                         # Rename the audio file to the new path
                         os.rename(path, new_path)
                         logging.info(f"Audio moved to {new_path}")
-                    
                     except Exception as e:
                         logging.error(f"Failed to move audio {path} to {new_path}: {e}")
 
                 # Convert video if available
                 if self.there_is_video:
+                    if self.progress_callback:
+                        self.progress_callback(50)  # Signal joining video
                     self.converted_out_path = self._join_video()
-
         # If no audio but video is available, join video
         else:
             if self.there_is_video:
+                if self.progress_callback:
+                    self.progress_callback(50)  # Signal joining video
                 self.converted_out_path = self._join_video()
 
         # Join subtitles if available
         if self.there_is_subtitle:
+            if self.progress_callback:
+                self.progress_callback(75)  # Signal joining subtitles
             if MERGE_SUBTITLE:
                 if self.converted_out_path is not None:
                     self.converted_out_path = self._join_video_subtitles(self.converted_out_path)
-
             else:
-
                 # Process each available subtitle track
                 for obj_sub in self.downloaded_subtitle:
                     language = obj_sub.get('language')
                     path = obj_sub.get('path')
                     forced = 'forced' in language
-
                     # Adjust the language name and set the new path based on forced status
                     if forced:
                         language = language.replace("forced-", "")
                         new_path = self.path_manager.output_filename.replace(".mp4", f".{language}.forced.vtt")
                     else:
                         new_path = self.path_manager.output_filename.replace(".mp4", f".{language}.vtt")
-                    
                     try:
                         # Rename the subtitle file to the new path
                         os.rename(path, new_path)
                         logging.info(f"Subtitle moved to {new_path}")
-                    
                     except Exception as e:
                         logging.error(f"Failed to move subtitle {path} to {new_path}: {e}")
+
+        # Signal completion after all joins
+        if self.progress_callback:
+            self.progress_callback(90)  # Signal completion of joining
 
     def _join_video(self):
         """
@@ -670,7 +711,7 @@ class ContentJoiner:
 
 
 class HLS_Downloader:
-    def __init__(self, output_filename: str=None, m3u8_playlist: str=None, m3u8_index: str=None, is_playlist_url: bool=True, is_index_url: bool=True):
+    def __init__(self, output_filename: str=None, m3u8_playlist: str=None, m3u8_index: str=None, is_playlist_url: bool=True, is_index_url: bool=True, progress_callback=None):
         """
         Initializes the HLS_Downloader class.
 
@@ -680,6 +721,7 @@ class HLS_Downloader:
             m3u8_index (str): The index URL for m3u8 streams.
             is_playlist_url (bool): Flag indicating if the m3u8_playlist is a URL.
             is_index_url (bool): Flag indicating if the m3u8_index is a URL.
+            progress_callback (callable): Optional callback function to receive progress updates.
         """
         if ((m3u8_playlist == None or m3u8_playlist == "") and output_filename is None) or ((m3u8_index == None or m3u8_index == "") and output_filename is None):
             logging.info(f"class 'HLS_Downloader'; call __init__(); no parameter")
@@ -688,9 +730,14 @@ class HLS_Downloader:
         self.output_filename = self._generate_output_filename(output_filename, m3u8_playlist, m3u8_index)
         self.path_manager = PathManager(self.output_filename)
         self.download_tracker = DownloadTracker(self.path_manager)
-        self.content_extractor = ContentExtractor()
-        self.content_downloader = ContentDownloader()
-        self.content_joiner = ContentJoiner(self.path_manager)
+        self.content_extractor = ContentExtractor(progress_callback)
+        self.content_downloader = ContentDownloader(progress_callback)
+        self.content_joiner = ContentJoiner(self.path_manager, progress_callback)
+
+        # Register progress callback if provided
+        self.progress_callback = progress_callback
+        if progress_callback:
+            ProgressCallback().register_callback(progress_callback)
 
         self.m3u8_playlist = m3u8_playlist
         self.m3u8_index = m3u8_index
@@ -940,8 +987,15 @@ class HLS_Downloader:
         if DOWNLOAD_SUBTITLE and len(self.download_tracker.downloaded_subtitle) > 0:
             self.content_downloader.download_subtitle(self.download_tracker.downloaded_subtitle)
 
-        # Join downloaded content
-        self.content_joiner.setup(self.download_tracker.downloaded_video, self.download_tracker.downloaded_audio, self.download_tracker.downloaded_subtitle, self.content_extractor.codec)
+        # Setup and perform the content joining
+        self.content_joiner.setup(
+            self.download_tracker.downloaded_video, 
+            self.download_tracker.downloaded_audio, 
+            self.download_tracker.downloaded_subtitle,
+            self.content_extractor.codec
+        )
+        # Actually perform the joining operation
+        self.content_joiner.conversione()
 
         # Clean up temporary files and directories
         self._clean(self.content_joiner.converted_out_path)
@@ -961,3 +1015,7 @@ class HLS_Downloader:
 
         # Clean up temporary files and directories
         self._clean(self.content_joiner.converted_out_path)
+
+        # Signal completion
+        if self.progress_callback:
+            self.progress_callback(100)  # Signal completion with 100% progress

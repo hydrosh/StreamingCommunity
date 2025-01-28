@@ -50,6 +50,7 @@ app.add_middleware(
 MAX_CONCURRENT_DOWNLOADS = 1  # Default to 1 concurrent download
 active_downloads = set()  # Set to track active downloads
 download_queue_lock = threading.Lock()
+current_download_progress = {"id": None, "progress": 0}  # Track current download progress
 
 # Site variable
 version, domain = get_version_and_domain()
@@ -65,6 +66,32 @@ client = MongoClient(config_manager.get("EXTRA", "mongodb"))
 db = client[config_manager.get("EXTRA", "database")]
 watchlist_collection = db['watchlist']
 downloads_collection = db['downloads']
+
+def update_download_progress(download_id, progress, status=None):
+    """Update the progress of a download in the database"""
+    try:
+        downloads_collection.update_one(
+            {"_id": download_id},
+            {"$set": {"progress": progress}}
+        )
+        if status:
+            downloads_collection.update_one(
+                {"_id": download_id},
+                {"$set": {"status": status}}
+            )
+            if status == 'completed':
+                downloads_collection.update_one(
+                    {"_id": download_id},
+                    {"$set": {
+                        "status": 'completed',
+                        "progress": 100,
+                        "completed_at": datetime.datetime.now(datetime.timezone.utc)
+                    }}
+                )
+                logging.info(f"Updated download status to completed for ID: {download_id}")
+        logging.info(f"Updated progress for download {download_id}: {progress}%")
+    except Exception as e:
+        logging.error(f"Error updating progress for download {download_id}: {str(e)}")
 
 def process_download_queue():
     while True:
@@ -84,50 +111,51 @@ def process_download_queue():
                         logging.info(f"Starting download of {next_download['type']}: {next_download['slug']}")
                         downloads_collection.update_one(
                             {"_id": next_download["_id"]},
-                            {"$set": {"status": "downloading"}}
+                            {"$set": {"status": "downloading", "progress": 0}}
                         )
                         
                         try:
+                            def progress_callback(progress, status=None):
+                                update_download_progress(next_download["_id"], progress, status)
+                            
                             if next_download["type"] == "movie":
                                 logging.info(f"Downloading movie: {next_download['slug']}")
-                                item_media = MediaItem(**{'id': next_download["id"], 'slug': next_download["slug"]})
-                                path_download = download_film(item_media)
-                            else:  # TV episode
+                                download_film(
+                                    id=next_download["id"],
+                                    slug=next_download["slug"],
+                                    progress_callback=progress_callback
+                                )
+                            elif next_download["type"] == "episode":
                                 logging.info(f"Downloading episode S{next_download['season']}E{next_download['episode']} of {next_download['slug']}")
-                                path_download = download_video(
-                                    next_download["slug"], 
+                                download_video(
                                     next_download["season"],
                                     next_download["episode"],
-                                    scrape_serie,
-                                    video_source
+                                    next_download["id"],
+                                    next_download["slug"],
+                                    progress_callback=progress_callback
                                 )
-                            
-                            logging.info(f"Download completed: {path_download}")
-                            # Update status to completed
-                            downloads_collection.update_one(
-                                {"_id": next_download["_id"]},
-                                {"$set": {
-                                    "status": "completed",
-                                    "path": path_download,
-                                    "completed_at": datetime.datetime.now(datetime.timezone.utc)
-                                }}
-                            )
+                                
+                            if True:
+                                progress_callback(100, 'completed')
+                            else:
+                                raise Exception("Download failed - path not returned")
+                                
                         except Exception as e:
                             logging.error(f"Download failed: {str(e)}")
                             downloads_collection.update_one(
                                 {"_id": next_download["_id"]},
                                 {"$set": {
                                     "status": "failed",
-                                    "error": str(e)
+                                    "error": str(e),
+                                    "progress": 0
                                 }}
                             )
                         finally:
                             active_downloads.remove(download_id)
-                else:
-                    logging.debug("No items in queue")
-            else:
-                logging.debug(f"Maximum concurrent downloads ({MAX_CONCURRENT_DOWNLOADS}) reached")
-        
+                            if current_download_progress["id"] == download_id:
+                                current_download_progress["id"] = None
+                                current_download_progress["progress"] = 0
+                                
         time.sleep(1)  # Prevent CPU overload
 
 # Start download queue processor in background
@@ -386,25 +414,22 @@ async def download_season(
 @app.get("/api/downloads/status")
 async def get_download_status():
     """Get the current download status and queue"""
-    try:
-        # Get all downloads with their status
-        downloads = list(downloads_collection.find(
-            {}, 
-            {'_id': 0}
-        ).sort("timestamp", 1))
-
-        # Separate downloads by status
-        active = [d for d in downloads if d["status"] == "downloading"]
-        queued = [d for d in downloads if d["status"] == "queued"]
-        
-        return {
-            "active_downloads": active,
-            "queue": queued,
-            "max_concurrent": MAX_CONCURRENT_DOWNLOADS
-        }
-    except Exception as e:
-        logging.error(f"Error getting download status: {e}")
-        raise HTTPException(status_code=500, detail="Failed to get download status")
+    current_download = None
+    if current_download_progress["id"]:
+        current_download = downloads_collection.find_one({"_id": current_download_progress["id"]})
+        if current_download:
+            current_download["progress"] = current_download_progress["progress"]
+            
+    queue = list(downloads_collection.find(
+        {"status": "queued"},
+        sort=[("timestamp", 1)]
+    ))
+    
+    return {
+        "current_download": current_download,
+        "queue": queue,
+        "active_downloads": len(active_downloads)
+    }
 
 @app.put("/api/downloads/config")
 async def update_download_config(max_concurrent: int):

@@ -29,7 +29,7 @@ table_show_manager = TVShowManager()
 
 
 
-def download_video(tv_name: str, index_season_selected: int, index_episode_selected: int, scrape_serie: ScrapeSerie, video_source: VideoSource) -> None:
+def download_video(tv_name: str, index_season_selected: int, index_episode_selected: int, scrape_serie: ScrapeSerie, video_source: VideoSource, progress_callback=None) -> None:
     """
     Download a single episode video.
 
@@ -37,6 +37,9 @@ def download_video(tv_name: str, index_season_selected: int, index_episode_selec
         - tv_name (str): Name of the TV series.
         - index_season_selected (int): Index of the selected season.
         - index_episode_selected (int): Index of the selected episode.
+        - scrape_serie (ScrapeSerie): Scraper instance for series
+        - video_source (VideoSource): Video source instance
+        - progress_callback (callable): Optional callback function to receive progress updates
     """
 
     start_message()
@@ -56,10 +59,11 @@ def download_video(tv_name: str, index_season_selected: int, index_episode_selec
     video_source.get_content()
     master_playlist = video_source.get_playlist()
     
-    # Download the episode
+    # Download the episode using the m3u8 playlist
     HLS_Downloader(
-        m3u8_playlist=master_playlist,
-        output_filename=os.path.join(mp4_path, mp4_name)
+        m3u8_playlist=master_playlist, 
+        output_filename=os.path.join(mp4_path, mp4_name),
+        progress_callback=progress_callback
     ).start()
 
     return os.path.join(mp4_path, mp4_name)

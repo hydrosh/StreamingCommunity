@@ -36,9 +36,9 @@ function App() {
     <Router>
       <Navbar toggleTheme={toggleTheme} theme={theme} />
       <Routes>
-        <Route path="/" element={<Dashboard theme={theme} />} />
+        <Route path="/" element={<Dashboard theme={theme} toggleTheme={toggleTheme} />} />
         <Route path="/search" element={<SearchResults theme={theme} />} />
-        <Route path="/title/:id" element={<TitleDetail theme={theme} />} />
+        <Route path="/title/:id" element={<TitleDetail theme={theme} toggleTheme={toggleTheme} />} />
         <Route path="/watchlist" element={<Watchlist theme={theme} />} />
         <Route path="/downloads" element={<Downloads theme={theme} />} />
       </Routes>

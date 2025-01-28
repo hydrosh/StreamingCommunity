@@ -1,29 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import PropTypes from 'prop-types';
-import axios from 'axios';
-import { Container, Button, Form, InputGroup } from 'react-bootstrap';
-
+import { Container } from 'react-bootstrap';
 import SearchBar from './SearchBar.js';
-import { API_URL } from './ApiUrl.js';
 
-const Dashboard = ({ theme }) => {
-  const [items, setItems] = useState([]);
-
-  useEffect(() => {
-    fetchItems();
-  }, []);
-
-  const fetchItems = async (filter = '') => {
-    try {
-      const response = await axios.get(`${API_URL}/items?filter=${filter}`);
-      setItems(response.data);
-    } catch (error) {
-      console.error("Error fetching items:", error);
-    }
-  };
-
+const Dashboard = ({ theme, toggleTheme }) => {
   const handleSearch = (query) => {
-    fetchItems(query);
+    // Handle search through the SearchBar component
+    console.log("Search query:", query);
   };
 
   return (

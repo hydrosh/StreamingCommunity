@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import axios from 'axios';
-import { Container, Row, Col, Card, Button, Badge, Modal } from 'react-bootstrap';
+import { Container, Row, Col, Card, Button, Badge, Modal, ProgressBar } from 'react-bootstrap';
 import { FaTrash, FaPlay, FaDownload, FaClock } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 
 import { SERVER_PATH_URL, SERVER_DELETE_URL, API_URL } from './ApiUrl';
 
-const Downloads = ({ theme }) => {
+const Downloads = ({ theme = 'light' }) => {
   const [downloads, setDownloads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [downloadStatus, setDownloadStatus] = useState({ current_download: null, queue: [] });
@@ -86,33 +86,24 @@ const Downloads = ({ theme }) => {
     }
   };
 
-  // Get status badge
+  // Helper function to get status badge properties
   const getStatusBadge = (item) => {
-    const isCurrentDownload = downloadStatus.current_download && 
-      downloadStatus.current_download.id === item.id &&
-      downloadStatus.current_download.type === item.type;
-
-    if (isCurrentDownload) {
-      return { color: 'primary', text: 'Downloading' };
+    if (!item || !item.status) {
+      return { color: 'secondary', text: 'Unknown' };
     }
-
-    const isQueued = downloadStatus.queue.some(queueItem => 
-      queueItem.id === item.id && queueItem.type === item.type
-    );
-
-    if (isQueued) {
-      return { color: 'warning', text: 'In Queue' };
+    
+    switch (item.status.toLowerCase()) {
+      case 'completed':
+        return { color: 'success', text: 'Completed' };
+      case 'downloading':
+        return { color: 'primary', text: 'Downloading' };
+      case 'queued':
+        return { color: 'warning', text: 'Queued' };
+      case 'failed':
+        return { color: 'danger', text: 'Failed' };
+      default:
+        return { color: 'secondary', text: item.status };
     }
-
-    if (item.status === "completed") {
-      return { color: 'success', text: 'Completed' };
-    }
-
-    if (item.status === "failed") {
-      return { color: 'danger', text: 'Failed' };
-    }
-
-    return null;
   };
 
   // Initial fetch and periodic updates
@@ -160,7 +151,21 @@ const Downloads = ({ theme }) => {
                       </p>
                     )}
                   </div>
-                  <Badge bg="primary"><FaDownload /> Downloading</Badge>
+                  <div className="text-end">
+                    <Badge bg="primary"><FaDownload /> Downloading</Badge>
+                    <div className="progress mt-2" style={{ width: '200px', height: '20px' }}>
+                      <div 
+                        className="progress-bar" 
+                        role="progressbar" 
+                        style={{ width: `${downloadStatus.current_download.progress}%` }}
+                        aria-valuenow={downloadStatus.current_download.progress} 
+                        aria-valuemin="0" 
+                        aria-valuemax="100"
+                      >
+                        {downloadStatus.current_download.progress}%
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </Card.Body>
             </Card>
@@ -201,11 +206,11 @@ const Downloads = ({ theme }) => {
             {movies.map((movie) => (
               <Col key={movie.id}>
                 <Card 
-                  className={`mb-3 ${theme === 'dark' ? 'bg-dark text-white border-secondary' : ''}`}
+                  className={`mb-3 ${theme === 'dark' ? 'bg-dark text-white' : ''}`}
                 >
                   <Card.Body>
                     <Row>
-                      <Col md={8}>
+                      <Col xs={12} md={8}>
                         <Card.Title className="mb-3">
                           {movie.slug.replace(/-/g, ' ')}
                         </Card.Title>
@@ -216,15 +221,26 @@ const Downloads = ({ theme }) => {
                           >
                             {getStatusBadge(movie).text}
                           </Badge>
-                          {movie.progress && (
-                            <small className="text-muted">
-                              {movie.progress}%
-                            </small>
-                          )}
                         </div>
-                        <small className="text-muted d-block">
+                        {movie.status === 'downloading' && (
+                          <div className="mb-2">
+                            <ProgressBar 
+                              animated
+                              now={movie.progress || 0} 
+                              label={`${movie.progress || 0}%`}
+                              variant="primary"
+                              style={{
+                                borderRadius: '5px',
+                                height: '25px',
+                                background: 'linear-gradient(90deg, rgba(0, 123, 255, 0.5) ${movie.progress}%, rgba(255, 255, 255, 0.1) ${movie.progress}%)',
+                                transition: 'width 0.5s ease-in-out'
+                              }}
+                            />
+                          </div>
+                        )}
+                        <p className={` ${theme === 'dark' ? 'text-light' : ''}`}>
                           Path: {movie.path}
-                        </small>
+                        </p>
                       </Col>
                       <Col md={4} className="d-flex justify-content-end align-items-center">
                         {movie.status === 'completed' && (
@@ -284,11 +300,11 @@ const Downloads = ({ theme }) => {
                   {episodes.map((episode) => (
                     <Col key={`${episode.id}-${episode.n_s}-${episode.n_ep}`}>
                       <Card 
-                        className={`mb-3 ${theme === 'dark' ? 'bg-dark text-white border-secondary' : ''}`}
+                        className={`mb-3 ${theme === 'dark' ? 'bg-dark text-white' : ''}`}
                       >
                         <Card.Body>
                           <Row>
-                            <Col md={8}>
+                            <Col xs={12} md={8}>
                               <Card.Title className="mb-3">
                                 S{episode.n_s}E{episode.n_ep}
                               </Card.Title>
@@ -299,15 +315,25 @@ const Downloads = ({ theme }) => {
                                 >
                                   {getStatusBadge(episode).text}
                                 </Badge>
-                                {episode.progress && (
-                                  <small className="text-muted">
-                                    {episode.progress}%
-                                  </small>
-                                )}
                               </div>
-                              <small className="text-muted d-block">
+                              {episode.status === 'downloading' && (
+                                <div className="mb-2">
+                                  <ProgressBar 
+                                    animated
+                                    now={episode.progress || 0} 
+                                    variant="primary"
+                                    style={{
+                                      borderRadius: '5px',
+                                      height: '25px',
+                                      background: 'linear-gradient(90deg, rgba(0, 123, 255, 0.5) ${episode.progress}%, rgba(255, 255, 255, 0.1) ${episode.progress}%)',
+                                      transition: 'width 0.5s ease-in-out'
+                                    }}
+                                  />
+                                </div>
+                              )}
+                              <p className={`${theme === 'dark' ? 'text-light' : ''}`}>
                                 Path: {episode.path}
-                              </small>
+                              </p>
                             </Col>
                             <Col md={4} className="d-flex justify-content-end align-items-center">
                               {episode.status === 'completed' && (
