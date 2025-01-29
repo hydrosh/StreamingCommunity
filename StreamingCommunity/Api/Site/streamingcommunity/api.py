@@ -115,9 +115,6 @@ def get_infoSelectTitle(url_title: str, domain: str, version: str):
 
         console.print(f"[blue]Making request to: {url_title}")
         response = httpx.get(url_title, headers=headers, timeout=10)
-        console.print(f"[blue]Response status: {response.status_code}")
-        console.print(f"[blue]Response headers: {response.headers}")
-        console.print(f"[blue]Response content: {response.text[:500]}...")
 
         # Se la risposta non è 200, prova a seguire eventuali reindirizzamenti
         if response.status_code in [301, 302, 307, 308]:
@@ -132,7 +129,6 @@ def get_infoSelectTitle(url_title: str, domain: str, version: str):
             data = response.json()
         except json.JSONDecodeError:
             console.print("[red]Failed to decode JSON response")
-            console.print(f"[red]Raw response: {response.text[:500]}")
             return None
 
         if 'props' not in data:
@@ -141,7 +137,6 @@ def get_infoSelectTitle(url_title: str, domain: str, version: str):
             return None
 
         json_response = data['props']
-        console.print(f"[blue]Props content: {json_response}")
 
         if 'title' not in json_response:
             console.print("[red]Invalid response format: missing 'title' key in props")
@@ -203,7 +198,6 @@ def get_infoSelectTitle(url_title: str, domain: str, version: str):
         console.print(f"[red]HTTP Error: {str(e)}")
         if hasattr(e, 'response'):
             console.print(f"[red]Response status: {e.response.status_code}")
-            console.print(f"[red]Response content: {e.response.text[:500]}")
         return None
     except Exception as e:
         console.print(f"[red]Unexpected Error: {str(e)}")

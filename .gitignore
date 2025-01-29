@@ -47,3 +47,4 @@ __pycache__/
 
 # PER PYCACHE -> pyclean .
 key.t
+StreamingCommunity/Lib/Downloader/HLS/downlaoder.old.py

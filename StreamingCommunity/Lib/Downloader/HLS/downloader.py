@@ -401,6 +401,7 @@ class ContentDownloader:
         Args:
             downloaded_video (list): A list containing information about the video to download.
         """
+        console.log("[bold cyan]Starting video download...[/bold cyan]")
         if not downloaded_video:
             return
 
@@ -429,9 +430,6 @@ class ContentDownloader:
             else:
                 console.log("[cyan]Video [red]already exists.")
 
-        if self.progress_callback:
-            self.progress_callback(100)  # Signal completion with 100% progress
-
     def download_audio(self, downloaded_audio):
         """
         Downloads audio tracks if they don't already exist.
@@ -439,6 +437,7 @@ class ContentDownloader:
         Args:
             downloaded_audio (list): A list containing information about audio tracks to download.
         """
+        console.log("[bold cyan]Starting audio tracks download...[/bold cyan]")
         logging.info(f"class 'ContentDownloader'; call download_audio() with parameter: {downloaded_audio}")
 
         for obj_audio in downloaded_audio:
@@ -467,6 +466,7 @@ class ContentDownloader:
             else:
                 console.log(f"[cyan]Audio [white]([green]{obj_audio.get('language')}[white]) [red]already exists.")
 
+        console.log("[bold green]Audio tracks download completed![/bold green]")
         if self.progress_callback:
             self.progress_callback(100)  # Signal completion with 100% progress
 
@@ -477,6 +477,7 @@ class ContentDownloader:
         Args:
             downloaded_subtitle (list): A list containing information about subtitles to download.
         """
+        console.log("[bold cyan]Starting subtitles download...[/bold cyan]")
         logging.info(f"class 'ContentDownloader'; call download_subtitle() with parameter: {downloaded_subtitle}")
 
         for obj_subtitle in downloaded_subtitle:
@@ -501,6 +502,7 @@ class ContentDownloader:
             with open(obj_subtitle.get("path"), "wb") as f:
                 f.write(HttpClient().get_content(m3u8_sub_parser.subtitle[-1]))
 
+        console.log("[bold green]Subtitles download completed![/bold green]")
         if self.progress_callback:
             self.progress_callback(100)  # Signal completion with 100% progress
 
@@ -548,27 +550,26 @@ class ContentJoiner:
             console.print(table)
             print("")
 
-        # Start the joining process
+            # Start the joining process
         self.conversione()
-
-        # Signal completion after joining
-        if self.progress_callback:
-            self.progress_callback(100)  # Signal completion with 100% progress
 
     def conversione(self):
         """
         Handles the joining of video, audio, and subtitles based on availability.
         """
+        console.log("[bold cyan]Starting content joining process...[/bold cyan]")
         if self.progress_callback:
             self.progress_callback(0)  # Signal start of joining
 
         # Join audio and video if audio is available
         if self.there_is_audio:
             if MERGE_AUDIO:
+                console.log("[bold cyan]Starting video and audio joining...[/bold cyan]")
                 if self.progress_callback:
                     self.progress_callback(25)  # Signal joining audio
                 # Join video with audio tracks
                 self.converted_out_path = self._join_video_audio()
+                console.log("[bold green]Video and audio joining completed![/bold green]")
             else:
                 # Process each available audio track
                 for obj_audio in self.downloaded_audio:
@@ -585,18 +586,23 @@ class ContentJoiner:
 
                 # Convert video if available
                 if self.there_is_video:
+                    console.log("[bold cyan]Starting video joining...[/bold cyan]")
                     if self.progress_callback:
                         self.progress_callback(50)  # Signal joining video
                     self.converted_out_path = self._join_video()
+                    console.log("[bold green]Video joining completed![/bold green]")
         # If no audio but video is available, join video
         else:
             if self.there_is_video:
+                console.log("[bold cyan]Starting video joining...[/bold cyan]")
                 if self.progress_callback:
                     self.progress_callback(50)  # Signal joining video
                 self.converted_out_path = self._join_video()
+                console.log("[bold green]Video joining completed![/bold green]")
 
         # Join subtitles if available
         if self.there_is_subtitle:
+            console.log("[bold cyan]Starting subtitles joining...[/bold cyan]")
             if self.progress_callback:
                 self.progress_callback(75)  # Signal joining subtitles
             if MERGE_SUBTITLE:
@@ -620,10 +626,13 @@ class ContentJoiner:
                         logging.info(f"Subtitle moved to {new_path}")
                     except Exception as e:
                         logging.error(f"Failed to move subtitle {path} to {new_path}: {e}")
+            console.log("[bold green]Subtitles joining completed![/bold green]")
 
         # Signal completion after all joins
         if self.progress_callback:
             self.progress_callback(90)  # Signal completion of joining
+
+        console.log("[bold green]Content joining process completed![/bold green]")
 
     def _join_video(self):
         """
@@ -885,55 +894,62 @@ class HLS_Downloader:
             logging.error("Video file converted does not exist.")
             sys.exit(0)
 
-        # Rename the output file to the desired output filename if it does not already exist
-        if not os.path.exists(self.output_filename):
-            missing_ts = False
-            missing_info = ""
+        missing_ts = False
+        missing_info = ""
 
-            # Rename the converted file to the specified output filename
-            os.rename(out_path, self.output_filename)
+        # Collect info about missing segments
+        for item in list_MissingTs:
+            if int(item['nFailed']) >= 1:
+                missing_ts = True
+                missing_info += f"[red]TS Failed: {item['nFailed']} {item['type']} tracks[/red]\n"
 
-            # Calculate file size and duration for reporting
-            formatted_size = internet_manager.format_file_size(os.path.getsize(self.output_filename))
-            formatted_duration = print_duration_table(self.output_filename, description=False, return_string=True)
+        # If the output file already exists, we'll use a different name
+        target_filename = self.output_filename
+        if os.path.exists(target_filename):
+            base, ext = os.path.splitext(target_filename)
+            counter = 1
+            while os.path.exists(target_filename):
+                target_filename = f"{base}_{counter}{ext}"
+                counter += 1
+            logging.info(f"Output file exists, using alternate name: {target_filename}")
 
-            # Collect info about type missing
-            for item in list_MissingTs:
-                if int(item['nFailed']) >= 1:
-                    missing_ts = True
-                    missing_info += f"[red]TS Failed: {item['nFailed']} {item['type']} tracks[/red]\n"
+        # Rename the converted file to the target filename
+        os.rename(out_path, target_filename)
 
-            # Prepare the report panel content
-            print("")
-            panel_content = (
-                f"[bold green]Download completed![/bold green]\n"
-                f"[cyan]File size: [bold red]{formatted_size}[/bold red]\n"
-                f"[cyan]Duration: [bold]{formatted_duration}[/bold]"
-            )
+        # Calculate file size and duration for reporting
+        formatted_size = internet_manager.format_file_size(os.path.getsize(target_filename))
+        formatted_duration = print_duration_table(target_filename, description=False, return_string=True)
 
-            if missing_ts:
-                panel_content += f"\n{missing_info}"
+        # Prepare the report panel content
+        print("")
+        panel_content = (
+            f"[bold green]Download completed![/bold green]\n"
+            f"[cyan]File size: [bold red]{formatted_size}[/bold red]\n"
+            f"[cyan]Duration: [bold]{formatted_duration}[/bold]"
+        )
 
-            # Display the download completion message
-            console.print(Panel(
-                panel_content,
-                title=f"{os.path.basename(self.output_filename.replace('.mp4', ''))}",
-                border_style="green"
-            ))
+        if missing_ts:
+            panel_content += f"\n{missing_info}"
 
-            # Handle missing segments
-            if missing_ts:
-                os.rename(self.output_filename, self.output_filename.replace(".mp4", "_failed.mp4"))
+        # Display the download completion message
+        console.print(Panel(
+            panel_content,
+            title=f"{os.path.basename(target_filename.replace('.mp4', ''))}",
+            border_style="green"
+        ))
 
-            # Delete all temporary files except for the output file
-            os_manager.remove_files_except_one(self.path_manager.base_path, os.path.basename(self.output_filename.replace(".mp4", "_failed.mp4")))
+        # Handle missing segments
+        if missing_ts:
+            failed_filename = target_filename.replace(".mp4", "_failed.mp4")
+            os.rename(target_filename, failed_filename)
+            target_filename = failed_filename
 
-            # Remove the base folder if specified
-            if REMOVE_SEGMENTS_FOLDER:
-                os_manager.remove_folder(self.path_manager.base_path)
+        # Delete all temporary files except for the output file
+        os_manager.remove_files_except_one(self.path_manager.base_path, os.path.basename(target_filename))
 
-        else:
-            logging.info("Video file converted already exists.")
+        # Remove the base folder if specified
+        if REMOVE_SEGMENTS_FOLDER:
+            os_manager.remove_folder(self.path_manager.base_path)
 
     def _valida_playlist(self):
         """
@@ -1006,12 +1022,23 @@ class HLS_Downloader:
         """
         m3u8_url_fixer.set_playlist(self.m3u8_index)
 
-        # Download video
+        # Extract content (video, audio, subtitles)
+        self.content_extractor.start(self.instace_parserClass)
+
+        # Download video and any available audio/subtitles
         self.download_tracker.add_video(self.m3u8_index)
         self.content_downloader.download_video(self.download_tracker.downloaded_video)
+
+        if DOWNLOAD_AUDIO and len(self.content_extractor.list_available_audio) > 0:
+            self.download_tracker.add_audio(self.content_extractor.list_available_audio)
+            self.content_downloader.download_audio(self.download_tracker.downloaded_audio)
+
+        if DOWNLOAD_SUBTITLE and len(self.content_extractor.list_available_subtitles) > 0:
+            self.download_tracker.add_subtitle(self.content_extractor.list_available_subtitles)
+            self.content_downloader.download_subtitle(self.download_tracker.downloaded_subtitle)
         
-        # Join video
-        self.content_joiner.setup(self.download_tracker.downloaded_video, [], [])
+        # Join content
+        self._join_content()
 
         # Clean up temporary files and directories
         self._clean(self.content_joiner.converted_out_path)
@@ -1019,3 +1046,15 @@ class HLS_Downloader:
         # Signal completion
         if self.progress_callback:
             self.progress_callback(100)  # Signal completion with 100% progress
+
+    def _join_content(self):
+        """
+        Sets up and performs content joining operation.
+        """
+        self.content_joiner.setup(
+            self.download_tracker.downloaded_video, 
+            self.download_tracker.downloaded_audio, 
+            self.download_tracker.downloaded_subtitle,
+            self.content_extractor.codec
+        )
+        self.content_joiner.conversione()

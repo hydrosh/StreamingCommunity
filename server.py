@@ -282,7 +282,11 @@ async def call_download_film(id: Optional[str] = Query(None), slug: Optional[str
         if existing_download:
             status = existing_download["status"]
             if status == "completed":
-                return {"status": "completed", "path": existing_download["path"]}
+                path = existing_download.get("path")
+                if path:
+                    return {"status": "completed", "path": path}
+                else:
+                    return {"status": "error", "detail": "Path not found for completed download"}
             return {"status": status}
 
         # Add to queue
@@ -603,7 +607,7 @@ async def fetch_all_downloads():
         raise HTTPException(status_code=500, detail="Errore nel recupero dei download")
 
 @app.get("/server/path/movie")
-async def fetch_movie_path(id: Optional[int] = Query(None)):
+async def fetch_movie_path(id: Optional[str] = Query(None)):
     if not id:
         logging.warning("Movie path request without ID parameter")
         raise HTTPException(status_code=400, detail="Missing movie ID")
@@ -615,16 +619,19 @@ async def fetch_movie_path(id: Optional[int] = Query(None)):
         )
 
         if movie and 'path' in movie:
-            logging.info(f"Movie path retrieved: {movie['path']}")
-            return {"path": movie['path']}
-        
+            if os.path.exists(movie['path']):
+                logging.info(f"Movie path retrieved: {movie['path']}")
+                return {"path": movie['path']}
+            else:
+                logging.error(f"Movie file not found at path: {movie['path']}")
+                raise HTTPException(status_code=404, detail="Movie file not found")
         else:
             logging.warning(f"Movie not found: ID {id}")
             raise HTTPException(status_code=404, detail="Movie not found")
-        
+
     except Exception as e:
-        logging.error(f"Error fetching movie path: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to fetch movie path")
+        logging.error(f"Error fetching movie path: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/server/path/episode")
 async def fetch_episode_path(id: Optional[int] = Query(None), season: Optional[int] = Query(None), episode: Optional[int] = Query(None)):
