@@ -19,7 +19,24 @@ from fastapi.middleware.cors import CORSMiddleware
 
 # Util
 from StreamingCommunity.Util.os import os_summary
-os_summary.get_system_summary()
+
+console = Console()
+
+# Initialize MongoDB
+try:
+    client = MongoClient('mongodb://localhost:27017/')
+    db = client['streamingcommunity']
+    downloads_collection = db['downloads']
+    watchlist_collection = db['watchlist']
+    logging.info("Successfully connected to MongoDB")
+except Exception as e:
+    logging.error(f"Failed to connect to MongoDB: {e}")
+    raise
+
+# Initialize FastAPI
+app = FastAPI()
+
+# Util
 from StreamingCommunity.Util.logger import Logger
 Logger()  # Initialize logging configuration
 from StreamingCommunity.Util._jsonConfig import config_manager
@@ -37,7 +54,6 @@ from StreamingCommunity.Api.Site.streamingcommunity.util.ScrapeSerie import Scra
 from StreamingCommunity.Api.Player.vixcloud import VideoSource
 
 # Variable
-app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -59,13 +75,12 @@ scrape_serie = ScrapeSerie("streamingcommunity")
 video_source = VideoSource("streamingcommunity", True)
 
 DOWNLOAD_DIRECTORY = os.getcwd()
-console = Console()
 
 # Mongo variable
-client = MongoClient(config_manager.get("EXTRA", "mongodb"))
-db = client[config_manager.get("EXTRA", "database")]
-watchlist_collection = db['watchlist']
-downloads_collection = db['downloads']
+# client = MongoClient(config_manager.get("EXTRA", "mongodb"))
+# db = client[config_manager.get("EXTRA", "database")]
+# watchlist_collection = db['watchlist']
+# downloads_collection = db['downloads']
 
 def update_download_progress(download_id, progress, status=None):
     """Update the progress of a download in the database"""
@@ -120,13 +135,54 @@ def process_download_queue():
                             
                             if next_download["type"] == "movie":
                                 logging.info(f"Downloading movie: {next_download['slug']}")
+                                # Get the relative path where the file will be saved
+                                rel_movie_path = "/".join([
+                                    "streamingcommunity",
+                                    config_manager.get("DEFAULT", "movie_folder_name"),
+                                    next_download['slug'],
+                                    f"{next_download['slug']}.mp4"
+                                ])
+                                # Get the full path for actual file operations
+                                full_movie_path = os.path.join(
+                                    DOWNLOAD_DIRECTORY,
+                                    config_manager.get("DEFAULT", "root_path"),
+                                    *rel_movie_path.split("/")
+                                )
+                                os.makedirs(os.path.dirname(full_movie_path), exist_ok=True)
+                                
                                 download_film(
                                     id=next_download["id"],
                                     slug=next_download["slug"],
                                     progress_callback=progress_callback
                                 )
+                                
+                                # Update relative path in database when download is complete
+                                downloads_collection.update_one(
+                                    {"_id": next_download["_id"]},
+                                    {"$set": {
+                                        "status": "completed",
+                                        "progress": 100,
+                                        "path": rel_movie_path
+                                    }}
+                                )
+                                
                             elif next_download["type"] == "episode":
                                 logging.info(f"Downloading episode S{next_download['season']}E{next_download['episode']} of {next_download['slug']}")
+                                # Get the relative path where the file will be saved
+                                rel_episode_path = "/".join([
+                                    "streamingcommunity",
+                                    config_manager.get("DEFAULT", "serie_folder_name"),
+                                    next_download['slug'],
+                                    f"S{next_download['season']}E{next_download['episode']}.mp4"
+                                ])
+                                # Get the full path for actual file operations
+                                full_episode_path = os.path.join(
+                                    DOWNLOAD_DIRECTORY,
+                                    config_manager.get("DEFAULT", "root_path"),
+                                    *rel_episode_path.split("/")
+                                )
+                                os.makedirs(os.path.dirname(full_episode_path), exist_ok=True)
+                                
                                 download_video(
                                     next_download["season"],
                                     next_download["episode"],
@@ -135,10 +191,15 @@ def process_download_queue():
                                     progress_callback=progress_callback
                                 )
                                 
-                            if True:
-                                progress_callback(100, 'completed')
-                            else:
-                                raise Exception("Download failed - path not returned")
+                                # Update relative path in database when download is complete
+                                downloads_collection.update_one(
+                                    {"_id": next_download["_id"]},
+                                    {"$set": {
+                                        "status": "completed",
+                                        "progress": 100,
+                                        "path": rel_episode_path
+                                    }}
+                                )
                                 
                         except Exception as e:
                             logging.error(f"Download failed: {str(e)}")
@@ -152,11 +213,8 @@ def process_download_queue():
                             )
                         finally:
                             active_downloads.remove(download_id)
-                            if current_download_progress["id"] == download_id:
-                                current_download_progress["id"] = None
-                                current_download_progress["progress"] = 0
-                                
-        time.sleep(1)  # Prevent CPU overload
+                            
+        time.sleep(1)  # Avoid busy waiting
 
 # Start download queue processor in background
 download_queue_thread = threading.Thread(target=process_download_queue, daemon=False)
@@ -446,41 +504,35 @@ async def update_download_config(max_concurrent: int):
     logging.info(f"Updated max concurrent downloads to: {MAX_CONCURRENT_DOWNLOADS}")
     return {"max_concurrent": MAX_CONCURRENT_DOWNLOADS}
 
-@app.get("/api/downloaded/{filename:path}")
+@app.get("/server/downloaded/{filename:path}")
 async def serve_downloaded_file(filename: str):
     try:
         # Decodifica il nome file
-        decoded_filename = unquote(filename)
-        logging.info(f"Decoded filename: {decoded_filename}")
-
-        # Cerca il file nel database
-        file_info = downloads_collection.find_one(
-            {"path": {"$regex": f".*{decoded_filename}$"}},
-            {"_id": 0, "path": 1}
+        filename = unquote(filename)
+        logging.info(f"Requested file: {filename}")
+        
+        # Costruisci il path completo
+        file_path = os.path.join(
+            DOWNLOAD_DIRECTORY,
+            config_manager.get("DEFAULT", "root_path"),
+            filename  # il filename ora contiene il path relativo completo
         )
-
-        if not file_info:
-            logging.error(f"File not found in database: {decoded_filename}")
-            raise HTTPException(status_code=404, detail="File not found")
-
-        file_path = file_info["path"]
-        logging.info(f"Found file path: {file_path}")
-
-        # Verifica che il file esista
+        logging.info(f"Full path: {file_path}")
+        
         if not os.path.exists(file_path):
-            logging.error(f"File not found on disk: {file_path}")
-            raise HTTPException(status_code=404, detail="File not found")
-
-        # Restituisci il file
+            logging.error(f"File not found: {file_path}")
+            raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
+            
+        logging.info(f"Serving file: {file_path}")
         return FileResponse(
             file_path,
             media_type="video/mp4",
             filename=os.path.basename(file_path)
         )
-
+        
     except Exception as e:
-        logging.error(f"Error serving file: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        logging.error(f"Error serving file: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ---------- WATCHLIST UTIL MONGO ------------
 @app.post("/server/watchlist/add")
@@ -607,30 +659,30 @@ async def fetch_all_downloads():
         raise HTTPException(status_code=500, detail="Errore nel recupero dei download")
 
 @app.get("/server/path/movie")
-async def fetch_movie_path(id: Optional[str] = Query(None)):
-    if not id:
-        logging.warning("Movie path request without ID parameter")
-        raise HTTPException(status_code=400, detail="Missing movie ID")
-
+async def get_movie_path(id: str):
     try:
+        # Find movie in downloads collection
         movie = downloads_collection.find_one(
-            {'type': 'movie', 'id': id}, 
-            {'_id': 0, 'path': 1}
+            {"type": "movie", "id": id, "status": "completed"}
         )
 
         if movie and 'path' in movie:
-            if os.path.exists(movie['path']):
+            full_path = os.path.join(DOWNLOAD_DIRECTORY, config_manager.get("DEFAULT", "root_path"), movie['path'])
+            logging.info(f"Full path: {full_path}")
+            logging.info(f"Relative path: {movie['path']}")
+            
+            if os.path.exists(full_path):
                 logging.info(f"Movie path retrieved: {movie['path']}")
                 return {"path": movie['path']}
             else:
-                logging.error(f"Movie file not found at path: {movie['path']}")
-                raise HTTPException(status_code=404, detail="Movie file not found")
+                logging.error(f"Movie file not found at: {full_path}")
+                raise HTTPException(status_code=404, detail="File not found")
         else:
-            logging.warning(f"Movie not found: ID {id}")
-            raise HTTPException(status_code=404, detail="Movie not found")
+            logging.warning(f"Movie not found in downloads or path missing: {id}")
+            raise HTTPException(status_code=404, detail="Movie not found in downloads")
 
     except Exception as e:
-        logging.error(f"Error fetching movie path: {e}")
+        logging.error(f"Error getting movie path: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/server/path/episode")
@@ -670,7 +722,7 @@ async def remove_episode(series_id: int = Query(...), season_number: int = Query
         logging.warning(f"Episode not found: S{season_number}E{episode_number}")
         raise HTTPException(status_code=404, detail="Episodio non trovato")
 
-    file_path = episode.get('path')
+    file_path = os.path.join(DOWNLOAD_DIRECTORY, config_manager.get("DEFAULT", "root_path"), episode.get('path'))
     if os.path.exists(file_path):
         os.remove(file_path)
         logging.info(f"Episode file deleted: {file_path}")
@@ -692,7 +744,7 @@ async def remove_movie(movie_id: str = Query(...)):
         logging.warning(f"Movie not found: ID {movie_id}")
         raise HTTPException(status_code=404, detail="Film non trovato")
 
-    file_path = movie.get('path')
+    file_path = os.path.join(DOWNLOAD_DIRECTORY, config_manager.get("DEFAULT", "root_path"), movie.get('path'))
     parent_folder = os.path.dirname(file_path)
 
     if os.path.exists(file_path):

@@ -7,7 +7,7 @@ import { FaDownload, FaPlay, FaPlus, FaTrash } from 'react-icons/fa';
 
 import SearchBar from './SearchBar.js';
 
-import { API_URL, SERVER_WATCHLIST_URL, SERVER_PATH_URL } from './ApiUrl.js';
+import { API_URL, API_BASE_URL, SERVER_WATCHLIST_URL, SERVER_PATH_URL } from './ApiUrl.js';
 
 const TitleDetail = ({ theme, toggleTheme }) => {
   const [titleDetails, setTitleDetails] = useState(null);
@@ -180,6 +180,7 @@ const TitleDetail = ({ theme, toggleTheme }) => {
           const response = await axios.get(`${SERVER_PATH_URL}/movie`, {
             params: { id: titleDetails.id }
           });
+          console.log("Got path from server:", response.data.path);
           path = response.data.path;
         } else {
           alert("Please select a specific episode to watch.");
@@ -188,6 +189,7 @@ const TitleDetail = ({ theme, toggleTheme }) => {
         
         setCurrentVideo(path);
       } catch (error) {
+        console.error("Error getting video path:", error);
         alert("Please download the content first.");
         return;
       }
@@ -412,10 +414,11 @@ const TitleDetail = ({ theme, toggleTheme }) => {
       <Modal show={showPlayer} onHide={() => setShowPlayer(false)} size="lg" centered>
         <Modal.Body>
           <video 
-            src={`${API_URL}/downloaded/${currentVideo}`} 
+            src={`${API_BASE_URL}/server/downloaded/${currentVideo}`}
             controls 
             autoPlay 
             style={{ width: '100%' }}
+            className="video-player"
           />
         </Modal.Body>
       </Modal>

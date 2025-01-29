@@ -5,7 +5,7 @@ import { Container, Row, Col, Card, Button, Badge, Modal, ProgressBar } from 're
 import { FaTrash, FaPlay, FaDownload, FaClock } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 
-import { SERVER_PATH_URL, SERVER_DELETE_URL, API_URL } from './ApiUrl';
+import { SERVER_PATH_URL, SERVER_DELETE_URL, API_URL, API_BASE_URL } from './ApiUrl';
 
 const Downloads = ({ theme = 'light' }) => {
   const [downloads, setDownloads] = useState([]);
@@ -54,35 +54,34 @@ const Downloads = ({ theme = 'light' }) => {
     }
   };
 
-  // Watch video
-  const handleWatchVideo = async (videoPath) => {
-    if (!videoPath) {
-      toast.error('Video path not found');
-      return;
-    }
-    
+  // Play video
+  const handlePlayClick = async (download) => {
     try {
-      // Ottieni il nome del file dal path completo
-      const filename = videoPath.split(/[\\/]/).pop();
-      
-      // Verifica che il file esista nel database
-      const response = await axios.get(`${SERVER_PATH_URL}/get`);
-      const downloads = response.data;
-      
-      // Trova il download corrispondente
-      const download = downloads.find(d => d.path.includes(filename));
-      
-      if (download?.path) {
-        const encodedPath = encodeURIComponent(filename);
-        const videoUrl = `${API_URL}/downloaded/${encodedPath}`;
-        setCurrentVideo(videoUrl);
+      // Se il download è completato, ottieni il path dal server
+      if (download.status === 'completed') {
+        let response;
+        if (download.type === 'movie') {
+          response = await axios.get(`${SERVER_PATH_URL}/movie`, {
+            params: { id: download.id }
+          });
+        } else {
+          response = await axios.get(`${SERVER_PATH_URL}/episode`, {
+            params: { 
+              id: download.id,
+              season: download.season,
+              episode: download.episode
+            }
+          });
+        }
+        console.log("Got path from server:", response.data.path);
+        setCurrentVideo(response.data.path);
         setShowPlayer(true);
       } else {
-        toast.error('File not found in downloads');
+        toast.warning('Download non completato');
       }
     } catch (error) {
-      console.error('Error getting video path:', error);
-      toast.error('Failed to get video path');
+      console.error('Error playing video:', error);
+      toast.error('Errore durante la riproduzione del video');
     }
   };
 
@@ -247,7 +246,7 @@ const Downloads = ({ theme = 'light' }) => {
                           <Button
                             variant="success"
                             className="me-2"
-                            onClick={() => handleWatchVideo(movie.path)}
+                            onClick={() => handlePlayClick(movie)}
                           >
                             <FaPlay />
                           </Button>
@@ -340,7 +339,7 @@ const Downloads = ({ theme = 'light' }) => {
                                 <Button
                                   variant="success"
                                   className="me-2"
-                                  onClick={() => handleWatchVideo(episode.path)}
+                                  onClick={() => handlePlayClick(episode)}
                                 >
                                   <FaPlay />
                                 </Button>
@@ -388,24 +387,15 @@ const Downloads = ({ theme = 'light' }) => {
         onHide={() => setShowPlayer(false)} 
         size="lg"
         centered
-        contentClassName={theme === 'dark' ? 'bg-dark' : 'bg-light'}
       >
-        <Modal.Header 
-          closeButton 
-          className={theme === 'dark' ? 'bg-dark text-white border-secondary' : 'bg-light'}
-          closeVariant={theme === 'dark' ? 'white' : 'dark'}
-        >
-          <Modal.Title>Video Player</Modal.Title>
-        </Modal.Header>
-        <Modal.Body className={theme === 'dark' ? 'bg-dark' : 'bg-light'}>
+        <Modal.Body>
           <video 
+            src={`${API_BASE_URL}/server/downloaded/${currentVideo}`}
             controls 
             autoPlay 
             style={{ width: '100%' }}
-            src={currentVideo}
-          >
-            Your browser does not support the video tag.
-          </video>
+            className="video-player"
+          />
         </Modal.Body>
       </Modal>
     </Container>
