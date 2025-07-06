@@ -1,21 +1,21 @@
 {
   "1337xx": {
     "domain": "to",
-    "full_url": "https://www.1337xx.to/",
+    "full_url": "http://www.1337xx.to/",
     "old_domain": "to",
-    "time_change": "2025-03-19 12:20:19"
+    "time_change": "2025-07-12 07:24:25"
   },
   "cb01new": {
-    "domain": "today",
-    "full_url": "https://cb01net.today/",
-    "old_domain": "world",
-    "time_change": "2025-07-01 07:22:25"
+    "domain": "pro",
+    "full_url": "https://cb01net.pro/",
+    "old_domain": "click",
+    "time_change": "2025-07-15 07:28:19"
   },
   "animeunity": {
     "domain": "so",
     "full_url": "http://www.animeunity.so/",
     "old_domain": "so",
-    "time_change": "2025-07-04 14:19:55"
+    "time_change": "2025-07-11 19:21:47"
   },
   "animeworld": {
     "domain": "ac",
@@ -24,10 +24,10 @@
     "time_change": "2025-03-21 12:20:27"
   },
   "guardaserie": {
-    "domain": "kaufen",
-    "full_url": "https://guardaserie.kaufen/",
-    "old_domain": "meme",
-    "time_change": "2025-07-02 12:42:58"
+    "domain": "cc",
+    "full_url": "https://guardaserietv.cc/",
+    "old_domain": "qpon",
+    "time_change": "2025-07-16 07:27:39"
   },
   "ddlstreamitaly": {
     "domain": "co",
@@ -42,21 +42,21 @@
     "time_change": "2025-04-29 12:30:30"
   },
   "altadefinizione": {
-    "domain": "qpon",
-    "full_url": "https://altadefinizione.qpon/",
-    "old_domain": "blog",
-    "time_change": "2025-06-30 21:19:33"
+    "domain": "free",
+    "full_url": "http://altadefinizione.free/",
+    "old_domain": "qpon",
+    "time_change": "2025-07-07 11:18:33"
   },
   "streamingcommunity": {
-    "domain": "cloud",
-    "full_url": "https://streamingunity.cloud/",
-    "old_domain": "life",
-    "time_change": "2025-07-02 11:18:46"
+    "domain": "boats",
+    "full_url": "https://streamingcommunityz.boats/",
+    "old_domain": "city",
+    "time_change": "2025-07-14 21:26:28"
   },
   "altadefinizionegratis": {
-    "domain": "life",
-    "full_url": "https://altadefinizionegratis.life/",
-    "old_domain": "blog",
-    "time_change": "2025-06-30 21:19:36"
+    "domain": "city",
+    "full_url": "http://altadefinizionegratis.city/",
+    "old_domain": "life",
+    "time_change": "2025-07-15 09:34:39"
   }
 }
